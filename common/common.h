@@ -645,6 +645,14 @@ struct common_params {
     // llama-connect params
     bool        server_connect      = false;
     std::string server_connect_code = "";
+    std::string cache_ssd_path = "";       // path for SSD-backed KV cache (empty = disabled)
+    int32_t cache_ssd_max_checkpoints = 64;  // max checkpoints to store on SSD per slot
+    size_t cache_ssd_hot_window_tokens = 16384;  // always-keep window in tokens
+    size_t cache_ssd_warm_window_tokens = 32768;  // keep-in-RAM window in tokens
+    size_t cache_ssd_page_size_tokens = 1024;     // tokens per page (512/1024/2048)
+    int32_t cache_ssd_max_cold = 0;         // max cold tier checkpoints (0=unlimited)
+    int32_t cache_ssd_max_conversations = 16; // max conversation directories
+    int32_t prompt_cache_max = 8;           // max prompt buffer entries (deduplicated system prompts)
 
     std::string public_path   = "";                                                                         // NOLINT
     std::string api_prefix    = "";                                                                         // NOLINT
