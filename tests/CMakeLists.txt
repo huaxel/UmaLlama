@@ -320,6 +320,9 @@ set_tests_properties(test-llama-context-model PROPERTIES FIXTURES_REQUIRED test-
 llama_build_and_test(test-thread-safety.cpp  LABEL "main backend"  ARGS -m "${MODEL_DEST}" -ngl 99 -p "The meaning of life is" -n 128 -c 256 -ub 32 -np 4 -t 2)
 set_tests_properties(test-thread-safety PROPERTIES FIXTURES_REQUIRED test-download-model)
 
+# Regression test for fewtarius/llama-ai issue #6:
+# SSD cache auto-sizing must respect --cache-ssd-hot-ram / --cache-ssd-warm-ram.
+llama_build_and_test(test-ssd-cache-caps.cpp)
 llama_build_and_test(test-arg-parser.cpp  LABEL behavior)
 llama_build_and_test(test-model-resolution.cpp  LABEL behavior)
 # the test serves its repos from an httplib server, and the library links it privately
