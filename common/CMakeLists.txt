@@ -93,6 +93,8 @@ add_library(${TARGET}
     llguidance.cpp
     log.cpp
     log.h
+    host-ram.cpp
+    host-ram.h
     ngram-cache.cpp
     ngram-cache.h
     ngram-map.cpp
