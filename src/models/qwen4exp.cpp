@@ -28,6 +28,10 @@ void llama_model_qwen4exp::load_arch_hparams(llama_model_loader & ml) {
     ml.get_key(LLM_KV_EXPERT_SHARED_FEED_FORWARD_LENGTH, hparams.n_ff_shexp, false);
     ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS,       hparams.f_norm_rms_eps);
 
+    // NextN/MTP draft block appended one past the trunk; read before anything uses n_layer()
+    ml.get_key(LLM_KV_NEXTN_PREDICT_LAYERS, hparams.n_layer_nextn, false);
+    GGML_ASSERT(hparams.n_layer_nextn < hparams.n_layer_all && "n_layer_nextn must be < n_layer_all");
+
     ml.get_key_or_arr(LLM_KV_ROPE_DIMENSION_SECTIONS,    hparams.rope_sections, 4, true);
 
     ml.get_key(LLM_KV_SSM_CONV_KERNEL,    hparams.ssm_d_conv);
@@ -195,7 +199,12 @@ void llama_model_qwen4exp::load_arch_tensors(llama_model_loader & ml) {
         output = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), { n_embd, n_vocab }, TENSOR_DUPLICATED);
     }
 
-    // flat [ple_head_dim, n_rows] gather target
+    // An MTP-only file carries just the draft block. Keep walking the trunk so the
+    // per-layer bookkeeping still runs, but let its tensors be absent.
+    const bool mtp_only    = hparams.n_layer_nextn > 0 && ml.get_weight("blk.0.hc_attn_norm.weight") == nullptr;
+    const int  trunk_flags = mtp_only ? TENSOR_NOT_REQUIRED : 0;
+
+    // flat [ple_head_dim, n_rows] gather target; n_rows is padded, so read it back
     if (hparams.ple_n_heads > 0) {
         // the head ranges are what the gather indexes, so they set the minimum row count
         int64_t ple_rows = 0;
@@ -212,9 +221,9 @@ void llama_model_qwen4exp::load_arch_tensors(llama_model_loader & ml) {
             }
             ple_rows = ple_w->tensor->ne[1];
         }
-
         per_layer_tok_embd = create_tensor(tn(LLM_TENSOR_PER_LAYER_TOKEN_EMBD, "weight"),
                                            { hparams.ple_head_dim, ple_rows }, TENSOR_READ_LAZY);
+        }
     }
 
     auto load_block = [&](int il, int flags) {
@@ -344,6 +353,112 @@ static ggml_tensor * hc_stream_mean(ggml_context * ctx, ggml_tensor * x) {
 
 // Hyper-connections keep hc parallel residual streams [n_embd, hc, T] in place of layer norms.
 // Returns the mixed [n_embd, T] stream; `inject` gets the [hc, T] scatter weights.
+// members only: graph_mtp builds a single block instead of the trunk
+llama_model_qwen4exp::graph::graph(const llama_model & model, const llm_graph_params & params, bool) :
+    llm_build_delta_net_base(params), model(model) {}
+
+// LLM_GRAPH_TYPE_DECODER_MTP draft head for Qwen3.8-Flash-Next.
+// The MTP block is one qwen4exp layer plus the nextn (eh_proj/enorm/hnorm) tensors.
+// Dense attention is used for the draft — a QSA indexer would need its own cache.
+llama_model_qwen4exp::graph_mtp::graph_mtp(const llama_model & model, const llm_graph_params & params)
+    : graph(model, params, true) {
+    const int64_t hc     = hparams.dsv4_hc_mult;
+    const int64_t n_embd = hparams.n_embd;
+
+    const int il = hparams.n_layer();
+    const auto & layer = model.layers[il];
+
+    GGML_ASSERT(hparams.n_layer_nextn == 1 && "qwen4exp MTP supports a single block");
+    GGML_ASSERT(ubatch.token && "qwen4exp MTP needs token input");
+    GGML_ASSERT(hparams.n_embd_out() == (uint32_t)(n_embd * hc) && "qwen4exp MTP hidden width mismatch");
+    GGML_ASSERT(layer.nextn.eh_proj && "MTP block is missing nextn.eh_proj");
+    GGML_ASSERT(layer.nextn.enorm   && "MTP block is missing nextn.enorm");
+    GGML_ASSERT(layer.nextn.hnorm   && "MTP block is missing nextn.hnorm");
+
+    int sections[4];
+    std::copy(std::begin(hparams.rope_sections), std::begin(hparams.rope_sections) + 4, sections);
+
+    // MTP takes a token embedding plus a hidden-state handoff from the previous block.
+    // eh_proj merges them into one input; the converter concatenates e(n) and h(n) to form it.
+    auto inp = std::make_unique<llm_graph_input_embd_h>(hparams.n_embd_out());
+
+    inp->tokens = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_tokens);
+    ggml_set_input(inp->tokens);
+
+    inp->embd = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hparams.n_embd_out(), n_tokens);
+    ggml_set_input(inp->embd);
+
+    inp->h = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hparams.n_embd_out(), n_tokens);
+    ggml_set_input(inp->h);
+    ggml_set_name(inp->h, "mtp_h_input");
+
+    ggml_tensor * tok_embd = ggml_get_rows(ctx0, model.tok_embd, inp->tokens);
+    cb(tok_embd, "mtp_tok_embd", il);
+
+    ggml_tensor * h = inp->h;
+    res->add_input(std::move(inp));
+
+    ggml_tensor * inp_pos     = build_inp_pos();
+    ggml_tensor * inp_out_ids = build_inp_out_ids();
+    // The draft block is the only layer in an MTP context and attends dense, so it takes a
+    // plain attention input. create_memory gives that context an attention-only filter.
+    auto * inp_attn = build_attn_inp_kv();
+
+    // the reference norms the whole hyper-connection row and splits into streams after,
+    // so hnorm spans hc*n_embd rather than one stream
+    ggml_tensor * h_norm = build_norm(h, layer.nextn.hnorm, nullptr, LLM_NORM_RMS, il);
+    h_norm = ggml_reshape_3d(ctx0, h_norm, n_embd, hc, n_tokens);
+    cb(h_norm, "mtp_hnorm", il);
+
+    ggml_tensor * e_norm = build_norm(tok_embd, layer.nextn.enorm, nullptr, LLM_NORM_RMS, il);
+    e_norm = ggml_repeat_4d(ctx0, ggml_reshape_3d(ctx0, e_norm, n_embd, 1, n_tokens), n_embd, hc, n_tokens, 1);
+    cb(e_norm, "mtp_enorm", il);
+
+    // fc_embedding(e) + fc_hidden(h) is one projection of the concatenation; the converter
+    // merges the two checkpoint tensors into this single eh_proj
+    ggml_tensor * inpL = build_lora_mm(layer.nextn.eh_proj,
+            ggml_concat(ctx0, e_norm, h_norm, 0), layer.nextn.eh_proj_s);
+    cb(inpL, "mtp_eh_proj", il);
+
+    ggml_tensor * inject = nullptr;
+    ggml_tensor * cur = build_hc_mix(inpL,
+            layer.hc_attn_norm, layer.hc_attn_down, layer.hc_attn_up, layer.hc_attn_inject, &inject, il);
+    cb(cur, "mtp_hc_attn_pre", il);
+
+    // dense attention for the draft (no QSA)
+    cur = build_layer_attn(inp_attn, nullptr, cur, inp_pos, sections, il);
+    inpL = build_hc_combine(inpL, cur, inject, il);
+    cb(inpL, "mtp_hc_attn_post", il);
+
+    cur = build_hc_mix(inpL,
+            layer.hc_ffn_norm, layer.hc_ffn_down, layer.hc_ffn_up, layer.hc_ffn_inject, &inject, il);
+    cb(cur, "mtp_hc_ffn_pre", il);
+
+    cur = build_layer_ffn(cur, il);
+    cb(cur, "ffn_out", il);
+
+    inpL = build_hc_combine(inpL, cur, inject, il);
+    cb(inpL, "mtp_l_out", il);
+
+    ggml_tensor * flat = ggml_reshape_2d(ctx0, inpL, hc*n_embd, n_tokens);
+    res->t_h_nextn = flat;
+
+    if (inp_out_ids) {
+        flat = ggml_get_rows(ctx0, flat, inp_out_ids);
+        inpL = ggml_reshape_3d(ctx0, flat, n_embd, hc, n_outputs);
+    }
+
+    cur = build_hc_mix(inpL, model.hc_head_norm, model.hc_head_down, model.hc_head_up, nullptr, nullptr, -1);
+    cb(cur, "result_norm", -1);
+    res->t_embd = cur;
+
+    cur = build_lora_mm(model.output, cur, model.output_s);
+    cb(cur, "result_output", -1);
+    res->t_logits = cur;
+
+    ggml_build_forward_expand(gf, cur);
+}
+
 ggml_tensor * llama_model_qwen4exp::graph::build_hc_mix(
         ggml_tensor *  x,
         ggml_tensor *  w_norm,
