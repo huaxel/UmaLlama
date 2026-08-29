@@ -7694,6 +7694,11 @@ static void ggml_vk_mul_mat_id_q_f16(ggml_backend_vk_context * ctx, vk_context& 
     const uint64_t row_ids_offset = 1 + 2 * max_tiles;
     const uint64_t row_map_words = row_ids_offset + max_tiles * bn;
 
+    // CachyLLama: keep padded_N for the carry's fused-scale + use_row_lists push constants.
+    // (Upstream 77f132cb1 removed this in favor of K-padding for the bare mmid path, but
+    // our mul_mat_mat_id pipeline is more advanced and still uses padded_N for the Y staging.)
+    const uint32_t padded_n = qy_needs_dequant ? ROUNDUP_POW2(ne11, pipeline->wg_denoms[1]) : ne11;
+
     // PROBE (GGML_VK_MMID_PROBE=1): which mmid tile actually runs, and with how many threads.
     static const char * mmid_probe_env = getenv("GGML_VK_MMID_PROBE");
     if (mmid_probe_env && atoi(mmid_probe_env) != 0) {
@@ -7942,10 +7947,6 @@ static void ggml_vk_mul_mat_id_q_f16(ggml_backend_vk_context * ctx, vk_context& 
     if (!ggml_vk_dim01_contiguous(src1) && !qy_needs_dequant && !quantize_y) {
         stride_batch_y = src1->nb[0] / ggml_type_size(src1->type);
     }
-
-    // N padded for workgroup alignment when Y is dequantized on the fly (matches the
-    // dense path); the concat-transpose/row-lists push constants carry it as padded_N.
-    const uint32_t padded_n = qy_needs_dequant ? ROUNDUP_POW2(ne11, pipeline->wg_denoms[1]) : ne11;
 
     // compute
     ggml_vk_matmul_id(
