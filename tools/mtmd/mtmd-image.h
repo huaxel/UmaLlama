@@ -189,7 +189,6 @@ private:
     static void solve_resize_ratio(int height, int width, int p, int r, int max_n_token, int & best_height, int & best_width);
     static void safe_resize(int height, int width, int & best_height, int & best_width, int p, int r, int max_n_token);
 };
-
 // custom llava-uhd slicing logic for MiniCPM-V
 struct mtmd_image_preprocessor_minicpmv : mtmd_image_preprocessor_llava_uhd {
     using mtmd_image_preprocessor_llava_uhd::mtmd_image_preprocessor_llava_uhd;

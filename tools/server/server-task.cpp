@@ -1955,4 +1955,3 @@ std::string server_task::validate_user_id(std::string user_id) {
     }
     return user_id;
 }
->>>>>>> 7043bf197 (server : thread user_id field from request body to server_task)
