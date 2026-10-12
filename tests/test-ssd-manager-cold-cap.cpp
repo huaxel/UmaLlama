@@ -41,13 +41,11 @@ static std::string hex16(uint64_t h) {
 // decode a few tokens into the given sequence so the per-seq state
 // serialization is non-empty
 static bool decode_tokens(llama_context * ctx, const std::vector<llama_token> & tokens, llama_seq_id seq) {
-    llama_batch batch = llama_batch_init((uint32_t) tokens.size(), 0, 1);
+    common_batch batch(ctx);
     for (uint32_t pos = 0; pos < tokens.size(); pos++) {
-        common_batch_add(batch, tokens[pos], (llama_pos) pos, { seq }, pos + 1 == tokens.size());
+        batch.add(tokens[pos], (llama_pos) pos, seq, pos + 1 == tokens.size());
     }
-    const bool ok = llama_decode(ctx, batch) == 0;
-    llama_batch_free(batch);
-    return ok;
+    return llama_process(ctx, LLAMA_PROCESS_TYPE_DECODE, batch.get()) == 0;
 }
 
 int main(int argc, char ** argv) {

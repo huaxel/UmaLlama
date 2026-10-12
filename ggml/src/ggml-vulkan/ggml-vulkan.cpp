@@ -3705,7 +3705,7 @@ void ggml_vk_load_shaders(vk_device& device, vk_pipeline requested) {
     // f16-acc + subgroup_size_control + (32 or 64) subgroup are all required;
     // on devices that have coopmat2 but no usable 16x16x16 cm1 (very rare) we
     // fall back to the scalar path.
-    // CachyLLama: the cm shaders (lightning_indexer_cm.comp prefill and
+    // UmaLLama: the cm shaders (lightning_indexer_cm.comp prefill and
     // _decode_cm.comp decode) hardcode TILE=16 and assume the workgroup's
     // first TILE lanes do the per-kv accumulation/dst-store while lanes
     // >=TILE sit idle. The shader's K/Q load loops use
@@ -4424,7 +4424,7 @@ vk_device ggml_vk_get_device(size_t idx) {
         // "radv/amdgpu: Not enough memory for command submission" followed by
         // vk::Queue::submit: ErrorDeviceLost. The conservative default on UMA
         // was 8 nodes per submit; raising it gives a reproducible +4.5% on tg64
-        // (CachyLLama RDNA3, Phoenix1/Phoenix, gfx1103, e.g. 7840U, Qwen3.6-35B
+        // (UmaLLama RDNA3, Phoenix1/Phoenix, gfx1103, e.g. 7840U, Qwen3.6-35B
         // Q4_K_XL: nps=100 vs nps=8). Discrete GPUs handle more work per submit
         // safely; 100 was the prior default there. A universal 64 hits the
         // safe middle ground: ~93% of the nps=100 win on 7840U, well under the

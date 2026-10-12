@@ -193,7 +193,7 @@ std::string persistence_path(const std::string & model_path) {
     }
 
     // mkdir() is not recursive, so create the parent first.
-    const std::string parent = std::string(home) + "/.cachylla";
+    const std::string parent = std::string(home) + "/.umallama";
     const std::string dir    = parent + "/coactivation";
     llama_coact_mkdir(parent.c_str());
     llama_coact_mkdir(dir.c_str());
@@ -319,6 +319,15 @@ static bool find_key(const std::string & in, size_t & pos, const std::string & k
 
 bool load(matrix & m, const std::string & path) {
     std::ifstream in(path);
+    if (!in) {
+        // Fallback: check legacy ~/.cachylla path if path contains "/.umallama/"
+        const size_t pos = path.find("/.umallama/");
+        if (pos != std::string::npos) {
+            std::string legacy_path = path;
+            legacy_path.replace(pos, 11, "/.cachylla/");
+            in.open(legacy_path);
+        }
+    }
     if (!in) return false;
     std::stringstream ss; ss << in.rdbuf();
     std::string s = ss.str();

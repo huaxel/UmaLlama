@@ -2,22 +2,22 @@
 
 **Version:** 3.0
 **Date:** 2026-09-05
-**Purpose:** Technical reference for CachyLLama development (methodology in `.clio/instructions.md`)
+**Purpose:** Technical reference for UmaLLama development (methodology in `.clio/instructions.md`)
 
 ---
 
 ## Project Overview
 
-**CachyLLama** is a fork of [llama.cpp](https://github.com/ggml-org/llama.cpp) focused on performance optimization for AMD APU hardware. It tracks upstream master through periodic merges, then layers on its own divergent work.
+**UmaLLama** is a fork of [llama.cpp](https://github.com/ggml-org/llama.cpp) focused on performance optimization for AMD APU hardware. It tracks upstream master through periodic merges, then layers on its own divergent work.
 
 - **Languages:** C11 (ggml core), C++17 (llama engine, common utilities), GLSL (Vulkan shaders), Python (conversion scripts, GGUF tooling)
 - **Build system:** CMake 3.14+
-- **Architecture:** Modular C library with multi-backend hardware acceleration (CPU, Vulkan, CUDA, Metal, HIP, etc.) plus CachyLLama-specific subsystems
+- **Architecture:** Modular C library with multi-backend hardware acceleration (CPU, Vulkan, CUDA, Metal, HIP, etc.) plus UmaLLama-specific subsystems
 - **License:** MIT (same as upstream `llama.cpp`, Copyright (c) 2023-2026 The ggml authors)
 - **Upstream:** <https://github.com/ggml-org/llama.cpp>
 - **Parent project:** [fewtarius/llama-ai](https://github.com/fewtarius/llama-ai) — runner scripts, GPU detection, benchmark harness
 
-### CachyLLama-specific subsystems
+### UmaLLama-specific subsystems
 
 | Subsystem | Location | Description |
 |-----------|----------|-------------|
@@ -42,8 +42,8 @@
 
 ```bash
 # Clone (with submodules for ggml)
-git clone --recurse-submodules https://github.com/huaxel/CachyLLama.git
-cd CachyLLama
+git clone --recurse-submodules https://github.com/huaxel/UmaLLama.git
+cd UmaLLama
 
 # Build (Vulkan on Linux AMD, Metal on macOS, default CPU elsewhere)
 cmake -B build -DGGML_VULKAN=ON
@@ -56,7 +56,7 @@ cmake --build build --config Release -j$(nproc)
 ./build/bin/llama-cli -m /path/to/model.gguf
 ```
 
-> For end-to-end usage (runner scripts, GPU detection, benchmark harness, GTT configuration), use the [parent project](https://github.com/fewtarius/llama-ai) which builds CachyLLama with the right cmake flags automatically.
+> For end-to-end usage (runner scripts, GPU detection, benchmark harness, GTT configuration), use the [parent project](https://github.com/fewtarius/llama-ai) which builds UmaLLama with the right cmake flags automatically.
 
 ---
 
@@ -90,7 +90,7 @@ cmake --build build --config Release -j$(nproc)
 
 | Module | Purpose |
 |--------|---------|
-| `include/llama.h` | Public C API (includes CachyLLama extensions: MoE tracking, residency, user isolation) |
+| `include/llama.h` | Public C API (includes UmaLLama extensions: MoE tracking, residency, user isolation) |
 | `src/llama.cpp` | Core API implementation |
 | `src/llama-model.cpp` | Model loading, architecture dispatch |
 | `src/llama-context.cpp` | Inference context, graph evaluation, expert activation tracking, residency touch hook |
@@ -103,7 +103,7 @@ cmake --build build --config Release -j$(nproc)
 | `common/kv-ssd-system-cache.cpp` | Cross-conversation system prompt cache |
 | `tools/server/server-context-ssd-manager.{h,cpp}` | Server integration of the SSD cache (tiering, caps, conversation/user routing) |
 | `common/host-ram.{h,cpp}` | Cross-platform available-RAM query |
-| `common/arg.cpp` | CLI argument parsing (includes CachyLLama flags) |
+| `common/arg.cpp` | CLI argument parsing (includes UmaLLama flags) |
 | `common/sampling.cpp` | Token sampling strategies |
 | `common/speculative.cpp` | Speculative decoding (Eagle3, DSpark, DFlash, MTP) |
 | `ggml/` | Tensor library with backends (submodule) |
@@ -130,14 +130,14 @@ cmake --build build --config Release -j$(nproc)
 | `docs/` | Documentation (build guides, architecture, development) |
 | `cmake/` | CMake modules and helpers |
 | `ci/` | CI run scripts |
-| `app/` | Unified `llama` binary target (intentionally not built in the default CachyLLama configuration) |
+| `app/` | Unified `llama` binary target (intentionally not built in the default UmaLLama configuration) |
 | `reference/` | Gitignored. Vendored reference checkouts for diff/audit (upstream `llama.cpp`, `strix-halo-llamacpp`) |
 
 ---
 
 ## Code Style
 
-CachyLLama follows upstream `llama.cpp` conventions — do not deviate.
+UmaLLama follows upstream `llama.cpp` conventions — do not deviate.
 
 - **C++17** standard, **C11** for ggml core
 - **4 spaces** indentation, no tabs
@@ -157,13 +157,13 @@ CachyLLama follows upstream `llama.cpp` conventions — do not deviate.
 
 **EditorConfig:** Root `.editorconfig` enforces: spaces, indent 4, LF, UTF-8, trailing whitespace trimmed.
 
-### CachyLLama-specific conventions
+### UmaLLama-specific conventions
 
-- CachyLLama additions are marked with `SPDX-License-Identifier: GPL-3.0-or-later` and `Copyright (c) 2026 fewtarius` at the top of each file
+- UmaLLama additions are marked with `SPDX-License-Identifier: GPL-3.0-or-later` and `Copyright (c) 2026 fewtarius` at the top of each file
 - Vulkan shader dispatch code that is env-gated should use the `GGML_VK_DISABLE_*` / `GGML_VK_*` naming convention
-- CachyLLama C API functions in `include/llama.h` should use the `llama_` prefix and be grouped with other CachyLLama extensions (after the upstream API section)
+- UmaLLama C API functions in `include/llama.h` should use the `llama_` prefix and be grouped with other UmaLLama extensions (after the upstream API section)
 - MoE-related code should reference `docs/moe-expert-residency.md` for architecture context
-- **Do not** write `Assisted-by:` in commit messages — this is a fork, commits go directly to the CachyLLama git history
+- **Do not** write `Assisted-by:` in commit messages — this is a fork, commits go directly to the UmaLLama git history
 
 ---
 
@@ -174,7 +174,7 @@ CachyLLama follows upstream `llama.cpp` conventions — do not deviate.
 | `llama-*` | Core llama modules | `llama-model`, `llama-context`, `llama-sampler` |
 | `ggml-*` | ggml backend modules | `ggml-cpu`, `ggml-cuda`, `ggml-metal`, `ggml-vulkan` |
 | `test-*` | Test files | `test-backend-ops`, `test-tokenizer-0`, `test-sampling` |
-| `llama-moe-*` | CachyLLama MoE subsystems | `llama-moe-residency`, `llama-moe-coact` |
+| `llama-moe-*` | UmaLLama MoE subsystems | `llama-moe-residency`, `llama-moe-coact` |
 
 Source files follow the pattern: `src/llama-{module}.cpp` / `src/llama-{module}.h`
 
@@ -198,7 +198,7 @@ Run a specific test binary:
 ./build/bin/test-tokenizer-0
 ```
 
-### CachyLLama-specific test coverage
+### UmaLLama-specific test coverage
 
 | Test | What it covers |
 |------|----------------|
@@ -232,7 +232,7 @@ Use `llama-bench` for parameter sweeps. For end-to-end cache performance benchma
 
 ## Commit Format
 
-CachyLLama uses its own git history as the canonical source of truth (no PR workflow — this is a fork). Commits are squash-merged into the main branch with descriptive messages.
+UmaLLama uses its own git history as the canonical source of truth (no PR workflow — this is a fork). Commits are squash-merged into the main branch with descriptive messages.
 
 ```
 <module>: <commit title>
@@ -311,9 +311,9 @@ User overrides (that win over the solver in `llama-run.sh` in the parent project
 
 ### Memory and storage guarantees
 
-CachyLLama makes different kinds of claims about its optimizations, and they have different levels of support. Use this three-way distinction when documenting or troubleshooting.
+UmaLLama makes different kinds of claims about its optimizations, and they have different levels of support. Use this three-way distinction when documenting or troubleshooting.
 
-**Things CachyLLama actually guarantees:**
+**Things UmaLLama actually guarantees:**
 
 - An expert in the R+F cache was selected by the R+F algorithm as a good candidate to keep resident.
 - A checkpoint on disk has the on-disk format we wrote (atomic write succeeded).
@@ -340,7 +340,7 @@ Check that the `kv-ssd` on-disk directory uses the expected `conv_hash` or SHA-2
 
 ### Independently disabling optimizations
 
-Each CachyLLama-specific optimization can be disabled in isolation so a regression can be bisected to a single cause. The flags:
+Each UmaLLama-specific optimization can be disabled in isolation so a regression can be bisected to a single cause. The flags:
 
 - `--no-moe-expert-residency` — disables the MoE expert madvise layer. Tracking remains on; the R+F cache and the touch path are skipped.
 - `--cache-ssd` / `--no-cache-ssd` — enables or disables the SSD checkpoint cache. The default is "auto" (enabled when the model is large enough to benefit).
@@ -354,15 +354,15 @@ If a workload regresses, the developer should be able to disable exactly one opt
 
 ## Maintenance Routines
 
-These are recurring tasks performed periodically to keep CachyLLama's divergence from upstream manageable. When starting a session, check if any are due.
+These are recurring tasks performed periodically to keep UmaLLama's divergence from upstream manageable. When starting a session, check if any are due.
 
 ### Upstream merge
 
-CachyLLama merges upstream `llama.cpp` master periodically via `git merge upstream/master`. Before merging:
+UmaLLama merges upstream `llama.cpp` master periodically via `git merge upstream/master`. Before merging:
 
 1. Push to a backup branch: `git branch backup-before-rebase`
-2. After the merge, re-check all CachyLLama carries for conflicts — especially `ggml/src/ggml-vulkan/ggml-vulkan.cpp` (which accumulates shader dispatch additions) and `src/llama-arch.cpp` / `src/llama-model.cpp` (which gain per-model architecture entries)
-3. The `patches/` directory in the parent project is deprecated — CachyLLama maintains its changes directly in git history
+2. After the merge, re-check all UmaLLama carries for conflicts — especially `ggml/src/ggml-vulkan/ggml-vulkan.cpp` (which accumulates shader dispatch additions) and `src/llama-arch.cpp` / `src/llama-model.cpp` (which gain per-model architecture entries)
+3. The `patches/` directory in the parent project is deprecated — UmaLLama maintains its changes directly in git history
 
 ### Patch-set status re-validation
 
@@ -370,7 +370,7 @@ Each upstream merge can change which carries are still needed. Re-check [docs/pa
 
 - For "Merged upstream" rows: drop the local copy on the next merge, rebase local additions onto the upstream version.
 - For "Not upstreamed" rows: keep carrying; verify the upstream status hasn't changed.
-- For "Upstream added" rows: rebase CachyLLama tuning/gating onto the upstream version when the differences are small enough.
+- For "Upstream added" rows: rebase UmaLLama tuning/gating onto the upstream version when the differences are small enough.
 
 **Watch upstream #24127** (CUDA MMQ refactor) — it added `static_assert((I_) % 32 == 0)` to the CASE macro, so any new `rdna3_5` config must keep `I` as a multiple of 32.
 
@@ -390,7 +390,7 @@ Each upstream merge can change which carries are still needed. Re-check [docs/pa
 4. Gate behind an env var (`GGML_VK_DISABLE_*` or `GGML_VK_*`)
 5. Run `test-backend-ops` to verify correctness
 
-### CachyLLama-specific API additions
+### UmaLLama-specific API additions
 
 New public C API functions go in `include/llama.h` (after the upstream API section) and `src/llama.cpp`. Follow the existing `LLAMA_API` visibility convention. Document with inline comments that describe what, not why — git history handles why.
 
@@ -439,12 +439,12 @@ or deployment layout.
 
 ## Patch-set table
 
-CachyLLama diverges from `upstream/master` by carrying these third-party works.
+UmaLLama diverges from `upstream/master` by carrying these third-party works.
 Re-evaluate when upstream merges or upstream PRs close.
 
-| Carry | Source | Upstream status | CachyLLama-specific additions |
+| Carry | Source | Upstream status | UmaLLama-specific additions |
 |-------|--------|-----------------|------------------------------|
-| Quantized-KV FA prefill dequant (Vulkan) | [Nathanw1014/llama.cpp#25494](https://github.com/ggml-org/llama.cpp/pull/25494) | **Merged upstream** as `dc72703fc` | CachyLLama retains the host-RAM gate via `common::host_available_ram()`, three env vars (`GGML_VK_NO_FA_SCRATCH_TRANSPOSE`, `GGML_VK_FA_SCRATCH_SAFETY_MB`, `GGML_VK_FA_SCRATCH_FORCE`), and printf-style warning. The abandoned q4/q5 and contiguize variants below are not wired in the canonical build. |
+| Quantized-KV FA prefill dequant (Vulkan) | [Nathanw1014/llama.cpp#25494](https://github.com/ggml-org/llama.cpp/pull/25494) | **Merged upstream** as `dc72703fc` | UmaLLama retains the host-RAM gate via `common::host_available_ram()`, three env vars (`GGML_VK_NO_FA_SCRATCH_TRANSPOSE`, `GGML_VK_FA_SCRATCH_SAFETY_MB`, `GGML_VK_FA_SCRATCH_FORCE`), and printf-style warning. The abandoned q4/q5 and contiguize variants below are not wired in the canonical build. |
 | FA dequant-once to q4_0/q4_1/q5_0/q5_1 KV | Nathanw1014 carry | **Dormant / not wired** | Shader `DEQUANT_TRANSPOSE` branches remain from `33cc3c520`, but the canonical build registers only the upstream q8_0 transpose pipeline; `GGML_VK_FA_DEQUANT_ALL` is not active. |
 | FA contiguize strided f16 KV | Nathanw1014 carry | **Dormant / not wired** | `dequant_f16_transpose.comp` remains from `404732f8c`, but the canonical build does not register it and `GGML_VK_FA_KV_CONTIG` is not active. |
 | Coopmat1 FA P-fragment hoist | Nathanw1014 carry | Not upstreamed | Hoists the P-fragment load out of the hsv_tile loop. Measured +5% on Qwen3.6-35B-A3B prefill, Strix Halo. |
@@ -457,25 +457,25 @@ Re-evaluate when upstream merges or upstream PRs close.
 | MMID wave32 probe | Nathanw1014 carry | **Dormant / not wired** | No `GGML_VK_MMID_WAVE32` control or active probe remains in the canonical build. |
 | MMID scale cache (q5_K, q4_K, superblock-amortized) | Nathanw1014 carry | **Dormant / not wired** | No active shared-memory scale-cache implementation remains in the canonical MMID path. |
 | FA MMQ dot product fp32 scaling | Nathanw1014 carry | Not upstreamed | Scales the MMQ dot product in fp32 before narrowing for numerical stability. |
-| FA split-K reduce shader | Nathanw1014 carry | **Upstream added** | `flash_attn_split_k_reduce.comp` is present upstream; no remaining CachyLLama-only shader delta. |
+| FA split-K reduce shader | Nathanw1014 carry | **Upstream added** | `flash_attn_split_k_reduce.comp` is present upstream; no remaining UmaLLama-only shader delta. |
 | FA top-K selection shader | Nathanw1014 carry | **Dormant / not wired** | `flash_attn_top_k.comp` remains in the tree, but the active sparse path uses upstream compacting and has no top-K pipeline registration. |
-| GATED_LINEAR_ATTN | Nathanw1014 carry | **Upstream added** as `f26efa02a` | Vulkan `GGML_OP_GATED_LINEAR_ATTN` support is now upstream in `gla.comp`; no remaining CachyLLama-only shader delta. |
-| DeepSeek-V4 hyper-connection fused ops | [ggml-org/llama.cpp#26578](https://github.com/ggml-org/llama.cpp/pull/26578) | **Merged upstream** (commit `ccbc17862`) | No CachyLLama changes — picked up cleanly in merge. Three shaders: `dsv4_hc_{pre,comb,post}.comp`. HC hardcoded to 4. Tunable with `GGML_VK_DISABLE_DSV4_HC[_COMB|_PRE|_POST]=1`. Measured: prefill +16.4%, decode +41.1% on DSV4-Flash IQ3_XXS, Nimo. |
-| DeepSeek-V4 Lightning Indexer | CachyLLama original plus upstream #27453 | **Upstream added** as `cb300598d`; local extensions are dormant | Upstream provides the active base `lightning_indexer.comp`; `lightning_indexer_cm.comp` and `lightning_indexer_decode_cm.comp` remain unregistered in the canonical build. See [init-order note](#vulkan-init-order-critical-lightning-indexer-and-dsv4-hc). |
-| DSV4 sparse FA gather-to-compact | CachyLLama original plus upstream #28105 | **Upstream added** generic sparse FA as `fc82583e6`; local top-K variant is dormant | The active sparse path uses upstream compaction; `flash_attn_top_k.comp` remains unregistered. |
-| FA flash-attn mask optimization | Nathanw1014 carry | **Upstream added** | `flash_attn_mask_opt.comp` is present upstream; no remaining CachyLLama-only shader delta. |
-| FA MMQ funcs shader | Nathanw1014 carry | **Upstream added** | `flash_attn_mmq_funcs.glsl` is present upstream; no remaining CachyLLama-only shader delta. |
+| GATED_LINEAR_ATTN | Nathanw1014 carry | **Upstream added** as `f26efa02a` | Vulkan `GGML_OP_GATED_LINEAR_ATTN` support is now upstream in `gla.comp`; no remaining UmaLLama-only shader delta. |
+| DeepSeek-V4 hyper-connection fused ops | [ggml-org/llama.cpp#26578](https://github.com/ggml-org/llama.cpp/pull/26578) | **Merged upstream** (commit `ccbc17862`) | No UmaLLama changes — picked up cleanly in merge. Three shaders: `dsv4_hc_{pre,comb,post}.comp`. HC hardcoded to 4. Tunable with `GGML_VK_DISABLE_DSV4_HC[_COMB|_PRE|_POST]=1`. Measured: prefill +16.4%, decode +41.1% on DSV4-Flash IQ3_XXS, Nimo. |
+| DeepSeek-V4 Lightning Indexer | UmaLLama original plus upstream #27453 | **Upstream added** as `cb300598d`; local extensions are dormant | Upstream provides the active base `lightning_indexer.comp`; `lightning_indexer_cm.comp` and `lightning_indexer_decode_cm.comp` remain unregistered in the canonical build. See [init-order note](#vulkan-init-order-critical-lightning-indexer-and-dsv4-hc). |
+| DSV4 sparse FA gather-to-compact | UmaLLama original plus upstream #28105 | **Upstream added** generic sparse FA as `fc82583e6`; local top-K variant is dormant | The active sparse path uses upstream compaction; `flash_attn_top_k.comp` remains unregistered. |
+| FA flash-attn mask optimization | Nathanw1014 carry | **Upstream added** | `flash_attn_mask_opt.comp` is present upstream; no remaining UmaLLama-only shader delta. |
+| FA MMQ funcs shader | Nathanw1014 carry | **Upstream added** | `flash_attn_mmq_funcs.glsl` is present upstream; no remaining UmaLLama-only shader delta. |
 | Keep DeepSeek lightning-indexer K cache f16 | Nathanw1014 carry | Not upstreamed | Forces f16 key cache under quantized `-ctk` for Lightning Indexer correctness. |
-| Vulkan APU `nodes_per_submit` auto-lower | CachyLLama original | **Dormant / reverted** | The canonical build uses 100 on all devices and the active override is `GGML_VK_MAX_NODES_PER_SUBMIT`; the UMA default-8 logic is not present. |
-| Strix Halo RDNA3.5 tuning (ROCm/HIP) | gaetan-puleo carry | Upstream added `mmq-config-rdna3-5.cuh` but CachyLLama's `mmq-config-rdna3_5.cuh` has Strix Halo-specific tuning | `71d1e8f2f` bumps I from 48 to 64 in all 232 MMQ CASE entries for upstream #24127 `static_assert((I_) % 32 == 0)`. |
-| `common::host_available_ram()` | CachyLLama original (refactor) | None | Extracted from duplicate implementations in `kv-ssd-cache.cpp` and the now-removed `kv_page_manager.cpp`. New files `common/host-ram.{h,cpp}`; `kv_page_manager` was deleted as superseded by `kv_ssd_cache`. |
-| DFlash framework | CachyLLama original | Not upstreamed | `src/models/dflash.cpp`. Generic decoder contract via `dflash.decoder_arch` metadata. Currently supports `"laguna"`. |
-| Laguna-S-2.1 | CachyLLama original | Not upstreamed | `src/models/laguna.cpp`. Sigmoid-routed MoE, shared expert, softplus attention gate, QK-norm, per-layer-type RoPE. |
+| Vulkan APU `nodes_per_submit` auto-lower | UmaLLama original | **Dormant / reverted** | The canonical build uses 100 on all devices and the active override is `GGML_VK_MAX_NODES_PER_SUBMIT`; the UMA default-8 logic is not present. |
+| Strix Halo RDNA3.5 tuning (ROCm/HIP) | gaetan-puleo carry | Upstream added `mmq-config-rdna3-5.cuh` but UmaLLama's `mmq-config-rdna3_5.cuh` has Strix Halo-specific tuning | `71d1e8f2f` bumps I from 48 to 64 in all 232 MMQ CASE entries for upstream #24127 `static_assert((I_) % 32 == 0)`. |
+| `common::host_available_ram()` | UmaLLama original (refactor) | None | Extracted from duplicate implementations in `kv-ssd-cache.cpp` and the now-removed `kv_page_manager.cpp`. New files `common/host-ram.{h,cpp}`; `kv_page_manager` was deleted as superseded by `kv_ssd_cache`. |
+| DFlash framework | UmaLLama original | Not upstreamed | `src/models/dflash.cpp`. Generic decoder contract via `dflash.decoder_arch` metadata. Currently supports `"laguna"`. |
+| Laguna-S-2.1 | UmaLLama original | Not upstreamed | `src/models/laguna.cpp`. Sigmoid-routed MoE, shared expert, softplus attention gate, QK-norm, per-layer-type RoPE. |
 
-**CachyLLama focus downstream:** If a third-party carry lands upstream cleanly,
-the CachyLLama copy can be dropped on the next `merge upstream/master` and the
+**UmaLLama focus downstream:** If a third-party carry lands upstream cleanly,
+the UmaLLama copy can be dropped on the next `merge upstream/master` and the
 local additions (memory gate, env overrides, follow-up fixes) rebased onto the
-upstream version. When a carry does not get upstreamed, CachyLLama carries it
+upstream version. When a carry does not get upstreamed, UmaLLama carries it
 indefinitely — re-check upstream status each merge.
 
 **Watch upstream #24127** (CUDA MMQ refactor) when bumping: it added
@@ -484,7 +484,7 @@ must keep I as a multiple of 32.
 
 ## Canonical upstream migration
 
-The deleted `fewtarius/CachyLLama` remote is preserved as `legacy-upstream`. The active `upstream` remote is now `ggml-org/llama.cpp`; `origin` remains `huaxel/CachyLLama`.
+The deleted `fewtarius/CachyLLama` remote is preserved as `legacy-upstream`. The active `upstream` remote is now `ggml-org/llama.cpp`; `origin` remains `huaxel/UmaLLama` (formerly `CachyLLama`).
 
 `master` has been promoted to the verified canonical port. The `canonical-port` branch remains as the migration checkpoint. `origin/master` still points to the legacy fork tip until the promotion is explicitly pushed. Future canonical updates should use the normal `master` workflow; keep `canonical-port` as a recovery reference.
 
@@ -496,7 +496,7 @@ The deleted `fewtarius/CachyLLama` remote is preserved as `legacy-upstream`. The
 | `66f8f76fb` | Remove dead `kv_page_manager`, consolidate SSD cache, add MoE tests, TTL host-RAM | Dead code removal, new tests, TTL feature — upstream hasn't reviewed. | ✅ Smaller codebase, MoE regression coverage. |
 | `116660728` | Rename `ssd_page_manager` → `ssd_cache_manager`, fix AGENTS.md Strix Halo status | Cosmetic rename matching class rename; upstream hasn't reviewed. | ✅ Baked into binary. |
 | `2cac39964` | SSD hardening: exact-match-only restore, `seq_pos_max` guard, v4 format, multimodal/safety guards, atomic deploy | Hardening built on fork-only SSD code. Includes `host-ram` bugfix, `kv-ssd-posix` mutex, new `test-ssd-system-cache`. | ✅ 97+ SSD checkpoints active; exact-match-only prevents corrupt state restores. |
-| `b6b882749` | `deploy`/`restart`/`clean` Makefile hardening | CachyLLama-specific deployment; atomic swap + rollback. | ✅ Staging/swap/rollback and the systemd stop/restart path were exercised successfully by `make deploy` on 2026-09-17. The recipe stages `$(BUILD_DIR)/bin/.` and verifies the deployed executable before restart. |
+| `b6b882749` | `deploy`/`restart`/`clean` Makefile hardening | UmaLLama-specific deployment; atomic swap + rollback. | ✅ Staging/swap/rollback and the systemd stop/restart path were exercised successfully by `make deploy` on 2026-09-17. The recipe stages `$(BUILD_DIR)/bin/.` and verifies the deployed executable before restart. |
 | `d56cb4583` | `make sync` routine | Minor Makefile refactor; not submitted upstream. | ✅ Used for rebase workflow. |
 | `9c7698b22` | Drop duplicate `common_get_model_or_exit` / `SRV_TRC` left by rebase auto-merge | Rebase artifact cleanup; not submitted upstream. | ✅ Built and tested. |
 

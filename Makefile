@@ -138,8 +138,8 @@ ifneq ($(DEPLOY_DIR),)
 	@set -eu; \
 	parent=$$(dirname -- "$(DEPLOY_DIR)"); \
 	sudo mkdir -p -- "$$parent"; \
-	stage=$$(sudo mktemp -d "$$parent/.cachy-llama-stage.XXXXXX"); \
-	backup="$$parent/.cachy-llama-backup-$$$$"; \
+	stage=$$(sudo mktemp -d "$$parent/.umallama-stage.XXXXXX"); \
+	backup="$$parent/.umallama-backup-$$$$"; \
 	old_present=0; new_deployed=0; service_stopped=0; \
 	rollback() { \
 		if [ "$$new_deployed" -eq 1 ]; then sudo rm -rf -- "$(DEPLOY_DIR)"; fi; \
