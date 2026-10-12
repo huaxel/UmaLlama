@@ -356,6 +356,14 @@ If a workload regresses, the developer should be able to disable exactly one opt
 
 These are recurring tasks performed periodically to keep UmaLLama's divergence from upstream manageable. When starting a session, check if any are due.
 
+### Upstream PR Alignment Strategy
+
+UmaLLama's core philosophy is to **stay as close to upstream `llama.cpp` as possible**. Every optimization, bugfix, or carry should be structured so that it is candidate-PR ready:
+
+- **Tier 1 (Direct PR Candidates):** Vulkan shader bugfixes (e.g., Lightning Indexer init-order), coopmat1 P-fragment hoisting, 32-wide subgroup pinning, and APU `nodes_per_submit` tuning are maintained in upstream-PR-ready form.
+- **Tier 2 (Modular Extensions):** Out-of-tree agentic features (persistent SSD KV cache in `common/`, MoE kernel paging in `src/llama-moe-residency.cpp`) must remain cleanly decoupled from core tensor execution graphs to ensure upstream merges stay conflict-free.
+- **Ecosystem Survey:** See [docs/ecosystem-and-upstream-strategy.md](docs/ecosystem-and-upstream-strategy.md) for a detailed architectural comparison of UmaLLama against `strix-llama`, Gufo, Strata, and Halogen.
+
 ### Upstream merge
 
 UmaLLama merges upstream `llama.cpp` master periodically via `git merge upstream/master`. Before merging:
