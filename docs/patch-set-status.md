@@ -2,6 +2,19 @@
 
 CachyLLama diverges from `upstream/master` by carrying third-party work. Re-evaluate this table when upstream merges or upstream PRs close — row status changes weekly.
 
+## 2026-10-12 sync (`upstream/master` 8bb3cf0d2)
+
+- Vulkan `mul_mat_id` tiled prepass (#29998): upstream extended hoisting and tiling into
+  `count_experts.comp`, emitting `data_row_map` directly on GPU. The legacy row-list/hoisting
+  prepass (`pipeline_mmid_row_lists`) was dropped as superseded. CachyLLama's `fused_scale`
+  binding (binding 5), `fusion_flags`, and `GGML_VK_MMID_PROBE` were rebased onto the new tile mapping.
+- Slot context checkpoints appendix: upstream natively saves and restores slot context
+  checkpoints within the slot file appendix. CachyLLama retains its sidecar `.ckpt` and tip
+  synthesis fallback when the appendix is empty.
+- Speculative decoding position & embeddings: adapted to upstream's `batch.set_embd_state()`.
+- Chat PEG parser & streaming: preserved CachyLLama's malformed DSML sanitization and salvage
+  fallback across upstream's PEG parser refactoring.
+
 ## 2026-10-08 sync (`upstream/master` 9c2e0e491)
 
 Dropped as superseded (no table rows — none existed for them):
