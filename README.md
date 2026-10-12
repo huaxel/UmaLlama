@@ -16,31 +16,12 @@ regardless of where it originated.
 
 ---
 
-## What CachyLLama is
+## Overview
 
-CachyLLama is the C++ inference engine in the
-[CachyLLama ecosystem](https://github.com/fewtarius/llama-ai). It is a fork of
-`llama.cpp` that tracks upstream master through periodic merges, then layers on
-a wide surface of performance work — some developed in-house, much adapted from
-upstream PRs and other forks.
+CachyLLama is the C++ inference engine of the [CachyLLama ecosystem](https://github.com/fewtarius/llama-ai). While upstream `llama.cpp` focuses on raw token execution, CachyLLama optimizes for **end-to-end agentic throughput** on shared-memory AMD APU hardware (18–30K prompt contexts on 5–20 t/s hardware).
 
-If you want the runner scripts, GPU/CPU detection, benchmark harness, and
-end-to-end install, use the
-[parent project](https://github.com/fewtarius/llama-ai). If you want just the
-inference engine with the persistent KV cache, MoE expert residency, Lightning
-Indexer, and the rest of the CachyLLama performance stack, you are in the right
-place.
-
-## What makes CachyLLama different
-
-Where upstream tracks raw model execution, CachyLLama tracks *end-to-end
-agentic throughput* — the metric that matters when you are running 18–30K-token
-prompts on 5–20 t/s hardware. We are faster on the critical path: Lightning
-Indexer fused ops, DSV4 hyper-connection fusion, quantized-KV flash-attention
-dequant-once, and APU-tuned command submission all shave time off the parts of
-the pipeline that dominate on shared-memory hardware. We support the same
-quantization types and model architectures as upstream — the difference is in
-how fast they run and how much of the prompt gets cached, not in what runs.
+- **This repository:** Core C++ inference engine with persistent KV caching, MoE residency paging, fused Vulkan shaders, and APU tuning.
+- **Turnkey installation:** The [parent project](https://github.com/fewtarius/llama-ai) provides automated hardware detection, ISA tuning, runner scripts, and benchmarks.
 
 ### Persistent SSD-backed KV cache
 
@@ -59,146 +40,44 @@ ring buffers prevent unbounded disk growth. Kernel readahead
 Conversation-hash and model-compatibility-hash checks prevent mismatched
 checkpoint restoration.
 
-**System prompt cache.** A global, cross-conversation cache keyed on the first N
-tokens of any prompt. First eval writes the state; subsequent requests skip the
-entire system prompt re-evaluation. Works for both standard transformer and
-hybrid (MoE/SSM) models — the per-position recurrent state in the state file
-means a state saved after the full prompt can be restored with `n_past` capped
-to the system prompt boundary. Default: 8 entries per model, 30 days unused
-before expiry.
+**System prompt cache.** Global cross-conversation cache keyed on the prompt prefix tokens. The first evaluation writes the state; subsequent requests skip prompt eval. Recurrent states are preserved for hybrid MoE/SSM models with `n_past` capped to boundary (default: 8 entries per model, 30-day expiry).
 
-**Hybrid MoE checkpoint restore.** Hybrid architectures (Qwen3.5/3.6, Gemma 4,
-GLM-4.7) combine attention cells with recurrent state, and the recurrent state
-covers all positions in the prompt regardless of how the attention cells are
-split. CachyLLama tracks recurrent state separately from attention cells, uses
-`n_tokens`-based matching when searching for checkpoints, and exposes
-`llama_memory_seq_rm_attn_only` to clear attention cells without disturbing
-recurrent state. MLA support for DeepSeek2/DeepSeek3 is included.
+**Hybrid MoE checkpoint restore.** Separates recurrent states from attention cells in hybrid models (Qwen3.5/3.6, Gemma 4, GLM-4.7, DeepSeek MLA). Exposes `llama_memory_seq_rm_attn_only` to clear attention cells without disturbing full-sequence recurrent memory.
 
 ### Host-memory prompt cache (`--cache-ram`)
 
-An in-memory ring of serialized KV state blobs, designed for the
-**agentic-interleaving** workload: a single agent makes multiple divergent
-auxiliary calls (keyword extraction, summarization, sub-questions) before
-returning to the main thread. The cache holds prior prompts so the next
-auxiliary call can find a divergent-prefix match instead of reprocessing the
-full context from scratch.
+An in-memory ring of serialized KV state blobs for **agentic interleaving** (where an agent makes divergent sub-queries before resuming main context):
 
-**Only useful with `--parallel > 1`.** With a single slot, the only slot in
-the system is the one being saved and immediately reloaded, so the cache can
-never hold state between requests — the just-saved entry is consumed by the
-load step in the same call, and the cache ends up empty. CachyLLama skips the
-save+load round-trip when `n_parallel <= 1` so the work doesn't happen at all
-(no VRAM↔RAM round-trip, no 1-second-per-turn stall). For multi-slot
-configurations the cache works as designed: idle slots accumulate divergent
-state that the LCP matcher uses to hot-swap into a fresh task.
-
-In single-slot deployments, the in-memory checkpoint ring
-(`slot.prompt.checkpoints`, the `deferred_create_final_checkpoint` system)
-already covers the same problem space at zero cost — it holds raw KV slices
-in VRAM, and the LCP match at slot selection restores them with a same-VRAM
-copy rather than a VRAM↔RAM round-trip.
+- **Multi-slot enabled (`--parallel > 1`):** Accumulates divergent state across idle slots so longest-common-prefix (LCP) matching can hot-swap tasks without full reprocessing.
+- **Single-slot efficiency:** In single-slot setups, CachyLLama automatically skips RAM serialization round-trips; the zero-cost VRAM checkpoint ring (`slot.prompt.checkpoints`) handles prefix restores directly.
 
 ### MoE expert management
 
-Three subsystems work together to run models larger than physical memory:
+Four subsystems work together to execute MoE models larger than physical RAM:
 
-**Expert activation tracking.** HTTP endpoints (`/expert-stats`,
-`/expert-tracking`) plus a C API (`llama_expert_tracking_enable`,
-`llama_expert_stats_get`, `llama_model_n_expert`, `llama_model_n_expert_used`)
-for reading per-layer expert activation counts and per-decode selections in real
-time. The activations feed the residency subsystem.
-
-**Expert SSD residency.** Enabled by `--moe-expert-residency`. The runtime tracks
-which experts fire per layer (recency + frequency), uses `madvise(MADV_WILLNEED)`
-to prefetch hot expert pages into RAM, and `madvise(MADV_FREE)` to lazily release
-cold ones back to the mmap'd file. Lets models whose total footprint exceeds
-physical RAM run at near-RAM speed — active ~3% of weights stay paged in, the
-rest stays on disk and only pays SSD latency on cold misses. Validated hit rates:
-95.5% on Qwen3.6-35B-A3B, 89.5% on GLM-4.7-Flash, 83% on gpt-oss-20b.
-
-**Expert host-RAM offload (`--cpu-moe`).** Routes MoE FFN expert tensors to host
-RAM via `tensor_buft_overrides` (LLM_FFN_EXPS_REGEX) while keeping
-attention/embedding layers on the GPU. Combined with residency, lets you run
-30–90 GB Q5_K_XL / Q8_K_XL MoE quants on hardware with 32 GB or less of unified
-memory — the rest stays mmap'd on SSD, only the LRU-resident expert subset lives
-in RAM.
-
-**Co-activation tracking.** A per-layer co-activation matrix persists across
-sessions at `~/.cachylla/coactivation/{model}.json`. FlashMoE showed pure LRU
-evicts hot experts 34% of the time; the matrix informs future prewarm ordering
-so jointly-active experts land together.
+- **Activation tracking:** Endpoints (`/expert-stats`, `/expert-tracking`) and C API (`llama_expert_stats_get`) provide real-time per-layer activation counts.
+- **SSD residency (`--moe-expert-residency`):** Tracks recency and frequency, using `madvise(MADV_WILLNEED)` to keep hot experts paged in RAM while cold weights remain mmap'd on SSD (validated hit rates: 95.5% on Qwen3.6-35B-A3B, 89.5% on GLM-4.7-Flash).
+- **Host-RAM offload (`--cpu-moe`):** Directs MoE FFN weights to host RAM via `tensor_buft_overrides` while keeping attention on GPU, allowing 30–90 GB MoE quants to run on 32 GB unified memory.
+- **Co-activation tracking:** Persists a per-layer joint-activation matrix (`~/.cachylla/coactivation/{model}.json`) to prewarm correlated expert pairs together.
 
 ### User isolation
 
-`user_id` as a first-class request parameter. Routes checkpoints to a `u/`
-namespace on disk. Per-user concurrency cap with HTTP 429 enforcement. Slot
-affinity (allocation prefers slots already owned by the requesting user for
-cache locality). OpenAI SDK compatible via `extra_body`.
+First-class multi-user tenancy: routes checkpoints to a `u/` namespace, enforces per-user concurrency limits with HTTP 429 errors, and implements slot affinity for cache locality (compatible with OpenAI SDK via `extra_body={"llama_user_id": "..."}`).
 
 ### Vulkan performance stack (AMD/RADV)
 
-CachyLLama carries a wide surface of Vulkan optimization work, all env-gated
-with opt-out defaults:
+- **DeepSeek-V4 Lightning Indexer:** Custom fused op for compressed-KV attention; dequantizes K into shared memory once per block and iterates Q across heads (verified 108/108 on `test-backend-ops`).
+- **DeepSeek-V4 hyper-connection fusion (`DSV4_HC_*`):** Fuses softmax-scale-iterate passes for HC=4 (prefill +16.4%, decode +41.1% on Strix Halo).
+- **Quantized-KV FA dequant-once:** Integrated upstream (`dc72703fc`); dequantizes and transposes into contiguous f16 scratch once per layer to avoid redundant dequantizations on UMA memory.
+- **APU submit batching:** Defaults to 8 `nodes_per_submit` on UMA devices to avoid the 2s `amdgpu` kernel lockup timeout (100 on discrete GPUs).
+- **Subgroup pinning:** Pins 32-wide subgroups for coopmat1 FA where narrowing is free on RDNA3 wave64 hardware.
+- **Grouped-GEMM & concat transpose:** Fused-scale epilogue and probe controls for `mul_mat_id`; opt-in tiled dim-0 concat transpose (`GGML_VK_CONCAT_TRANSPOSE=1`).
 
-**DeepSeek-V4 Lightning Indexer.** A custom fused op for DeepSeek's compressed-KV
-attention. The shader dequantizes K into shared memory once per block, reuses it
-across all heads, and walks Q per head in the inner loop. Verified 108/108 on
-`test-backend-ops` on Strix Halo (gfx1151, RDNA3.5). Two coopmat variants are
-committed but not yet wired up — tensor-core acceleration when the dispatch is
-ready.
+### CPU ISA detection & custom architectures
 
-**DeepSeek-V4 hyper-connection fused ops (DSV4_HC\_{PRE,COMB,POST}).** Three
-shaders replace softmax-scale-iterate sequences. Hardcoded HC=4. Measured on
-DSV4-Flash IQ3_XXS, Nimo (RADV Strix Halo), 2405-token prompt: prefill
-144.6 → 168.3 t/s (+16.4%), decode at 2.4k ctx 8.2 → 11.6 t/s (+41.1%).
-Merged upstream (commit `ccbc17862`); CachyLLama carries the tuning.
-
-**Quantized-KV flash-attention dequant-once.** Backports
-[ggml-org/llama.cpp#25494](https://github.com/ggml-org/llama.cpp/pull/25494)
-with a CachyLLama memory gate. The coopmat1 FA path re-dequantizes the
-quantized K/V cache inside every Q workgroup on every prefill step — fine on a
-discrete GPU with a big L2, brutal on shared-memory UMA. The fix dequantizes
-and transposes into a per-head-contiguous f16 scratch once per layer, then runs
-the coalesced f16 FA. Runtime controls: `GGML_VK_NO_FA_SCRATCH_TRANSPOSE=1`
-(disables), `GGML_VK_FA_SCRATCH_SAFETY_MB=N` (headroom, default 1024 MiB),
-`GGML_VK_FA_SCRATCH_FORCE=1` (bypass host-RAM check).
-
-**APU `nodes_per_submit` auto-lower.** Defaults to 8 on UMA devices (iGPU/APU,
-RDNA3 Phoenix) to stay under the 2s amdgpu `lockup_timeout`, keeps 100 on
-discrete GPUs. Override via `GGML_VK_NODES_PER_SUBMIT=N`.
-
-**Subgroup size pinning.** Pins a 32-wide subgroup for coopmat1 FA where
-narrowing is free on RDNA3 (wave64 hardware, 32-wide logical).
-
-**Concat transpose, MMID row-lists.** Infrastructure shaders for delta-net
-dim-0 concat and grouped-GEMM redesign, both env-gated and enabled by default.
-
-### CPU ISA auto-detection
-
-The upstream Vulkan build defaults to `GGML_NATIVE=OFF` and `GGML_AVX512=OFF`,
-leaving AVX-512 code paths compiled out on Zen 4 hardware that supports them.
-CachyLLama's parent project `scripts/detect-gpu.sh` reads `/proc/cpuinfo` (or
-`sysctl` on macOS), picks the highest ISA level the CPU supports (`avx512_bf16`
-on Zen 4, `avx512_vnni` on Sapphire Rapids, `avx2` on Zen 3, etc.), and
-`scripts/rebuild.sh` wires the matching cmake flags into the build.
-
-### DFlash and Laguna model support
-
-**DFlash** (`src/models/dflash.cpp`): A generic framework for target-
-architecture-specific decoder contracts. Gated via `dflash.decoder_arch` metadata
-(`LLM_KV_DECODER_ARCH`). Currently supports `"laguna"`.
-
-**Laguna-S-2.1** (`src/models/laguna.cpp`): sigmoid-routed MoE with score-
-correction bias, one shared expert, softplus attention output gate, QK-norm,
-and per-layer-type RoPE. Supports both XS.2 (hybrid full/SWA with per-head
-gate) and M.1 (full-attention with per-element gate) variants.
-
-### `common::host_available_ram()`
-
-Extracted from duplicate implementations in `kv-ssd-cache.cpp` and
-`kv_page_manager.cpp` into `common/host-ram.{h,cpp}`. Provides a cross-platform
-available-RAM query used by the FA scratch gate and auto-sizing code paths.
+- **Automated ISA detection:** The parent project probes hardware features to build with matching AVX-512 flags (`avx512_bf16` on Zen 4, `avx512_vnni` on Sapphire Rapids).
+- **DFlash & Laguna-S-2.1:** Generic decoder contract framework (`src/models/dflash.cpp`) and native support for sigmoid-routed MoE Laguna architectures (`src/models/laguna.cpp`).
+- **`common::host_available_ram()`:** Cross-platform available-RAM query used for safety gating and automatic memory budget sizing.
 
 ---
 
@@ -269,6 +148,7 @@ Generation holds steady at 36–38 t/s across all turns.
 | `--cache-ssd-hot-ram N` | auto | Hot tier RAM budget in MiB (0 = auto) |
 | `--cache-ssd-warm-ram N` | auto | Warm tier RAM budget in MiB (0 = auto) |
 | `--cache-ssd-cold-maxsize N` | 0 | Global cap on total cold tier bytes across all conversations in MiB (0 = unlimited). When exceeded, oldest conversations are evicted as whole directories. |
+| `--cache-ssd-no-fsync` | disabled | Skip fsync on checkpoint writes for reduced write latency (benchmarking only; env equivalent `LLAMA_ARG_NO_FSYNC=1`) |
 
 ### System prompt cache
 
@@ -311,29 +191,15 @@ callers use `extra_body={"llama_user_id": "..."}`. Validated to
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `GGML_VK_NODES_PER_SUBMIT` | auto | Override automatic `nodes_per_submit` (lower values feed RDNA3 iGPUs more frequently) |
+| `GGML_VK_NODES_PER_SUBMIT` | auto | Override automatic `nodes_per_submit` (APU defaults to 8 to avoid 2s amdgpu timeout; dGPU defaults to 100) |
 | `GGML_VK_DISABLE_LIGHTNING_INDEXER` | (unset) | Set to `1` to disable the DeepSeek-V4 Lightning Indexer fused op |
 | `GGML_VK_DISABLE_DSV4_HC[_COMB\|_PRE\|_POST]` | (unset) | Set to `1` to disable individual DSV4 hyper-connection fused ops |
-| `GGML_VK_CONCAT_TRANSPOSE` | (unset) | Set to `0` to disable the concat_transpose shader |
-| `GGML_VK_FA_KV_CONTIG` | (unset) | Set to `1` to enable the f16 KV contiguize pass for FA prefill |
-| `GGML_VK_MMID_F16B` | (unset) | Set to `1` to enable f16-B mul_mat_id path (env-gated, experimental) |
-| `GGML_VK_MMID_WAVE32` | (unset) | Set to `1` to probe 32-wide mul_mat_id on wave64 hardware |
+| `GGML_VK_CONCAT_TRANSPOSE` | (unset) | Set to `1` to enable the tiled concat_transpose shader for transposed dim-0 concat |
+| `GGML_VK_MMID_SCALE_EPILOGUE` | (unset) | Set to `1` to enable fused-scale epilogue in mul_mat_id tile shaders |
+| `GGML_VK_MMID_PROBE` | (unset) | Set to `1` to log diagnostic probe information for mul_mat_id tile execution and thread counts |
 
-### Quantized-KV flash-attention scratch control (Strix Halo)
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `GGML_VK_NO_FA_SCRATCH_TRANSPOSE` | (unset) | Set to `1` to disable the dequant+transpose scratch entirely |
-| `GGML_VK_FA_SCRATCH_SAFETY_MB` | 1024 | MiB of host-RAM headroom the scratch allocator requires before allocating |
-| `GGML_VK_FA_SCRATCH_FORCE` | (unset) | Set to `1` to bypass the host-RAM check |
-
-The gate runs at every prefill step when K and V are both quantized (q8_0 or
-q4_0), N is at least 64 (prefill, not decode), and the tensors are contiguous.
-If `required_scratch + GGML_VK_FA_SCRATCH_SAFETY_MB > MemAvailable`, the slow
-coopmat1 path runs instead and a one-time warning is logged. The scratch size
-grows with context: ~256 MiB at 128k for head_dim 128 (Qwen3-Coder-30B-A3B),
-~512 MiB at 128k for head_dim 256 (Qwen3.6-35B-A3B). Tracked upstream as
-[ggml-org/llama.cpp#25494](https://github.com/ggml-org/llama.cpp/pull/25494).
+> **Note on Quantized-KV Flash Attention:**
+> The quantized-KV FA dequant-once optimization is merged upstream (commit `dc72703fc` from [ggml-org/llama.cpp#25494](https://github.com/ggml-org/llama.cpp/pull/25494)) and enabled automatically for q8_0 KV prefill. Legacy manual scratch tuning flags (`GGML_VK_NO_FA_SCRATCH_TRANSPOSE`, `GGML_VK_FA_SCRATCH_SAFETY_MB`, `GGML_VK_FA_SCRATCH_FORCE`) are retired; see [docs/patch-set-status.md](docs/patch-set-status.md) for carry history.
 
 ### MoE expert residency / offload
 
@@ -442,7 +308,8 @@ cd llama-ai
 To build just the inference engine from this repo:
 
 ```bash
-cmake -B build
+# Vulkan backend on Linux AMD APU / GPU
+cmake -B build -DGGML_VULKAN=ON
 cmake --build build --config Release -j$(nproc)
 ```
 
@@ -469,37 +336,26 @@ build flags — everything is runtime config via the CLI flags above.
 
 ## Relationship with upstream llama.cpp
 
-CachyLLama is a fork of `llama.cpp`. The relationship is one of **loose
-tracking**: we periodically merge upstream master into CachyLLama, then carry
-our own divergent work on top. We do not aim for patch-by-patch parity.
+CachyLLama tracks upstream `llama.cpp` master through periodic merges while carrying optimizations tuned for shared-memory hardware:
 
-**Upstream-first where it lands cleanly.** When an upstream PR addresses a
-performance need (e.g. [PR #25494](https://github.com/ggml-org/llama.cpp/pull/25494)
-quantized-KV FA prefill), we track it through merge. When it does not get
-upstreamed, CachyLLama carries it indefinitely.
+- **Upstream sync:** Merged periodically; features landing upstream are rebased onto stock implementations.
+- **Carried optimizations:** External performance PRs and fork carries (Nathanw1014 flash-attention shaders, RDNA3.5 tuning) are maintained until upstreamed.
+- **CachyLLama originals:** Persistent KV cache, MoE expert residency, Lightning Indexer, DFlash/Laguna, user isolation, and Vulkan APU tuning.
 
-**Third-party borrowing.** We adapt performance work from other forks and PRs
-— Nathanw114's flash-attention shader optimizations (15+ commits), gaetan-puleo's
-Strix Halo RDNA3.5 ROCm tuning, and more. Each carry is documented in
-[AGENTS.md](AGENTS.md) with upstream status and CachyLLama-specific additions.
-
-**Our own work.** The persistent KV cache, MoE expert residency, Lightning
-Indexer, DFlash/Laguna, user isolation, and the Vulkan APU tuning are all
-CachyLLama originals or CachyLLama-led collaborations.
-
-See [AGENTS.md](AGENTS.md) for the full patch-set table and development
-conventions. The full patch-set status table is in
-[docs/patch-set-status.md](docs/patch-set-status.md).
+See [AGENTS.md](AGENTS.md) and [docs/patch-set-status.md](docs/patch-set-status.md) for the active carry table and conventions.
 
 ---
 
 ## License
 
 **CachyLLama source code:** MIT (same as upstream `llama.cpp`, see
-[LICENSE](LICENSE), Copyright (c) 2023-2026 The ggml authors). All CachyLLama
-additions — the persistent KV cache, MoE expert residency, Lightning Indexer,
-Vulkan shader work, DFlash/Laguna model support, user isolation, and the
-`common::host_available_ram()` utility — are released under the same MIT terms.
+[LICENSE](LICENSE), Copyright (c) 2023-2026 The ggml authors). Core CachyLLama
+additions — the persistent KV cache, user isolation, Lightning Indexer, Vulkan
+shader work, DFlash/Laguna model support, and the `common::host_available_ram()`
+utility — are released under MIT terms. The MoE expert residency and
+co-activation tracking subsystems (`src/llama-moe-residency.*`,
+`src/llama-moe-coact.*`) are licensed under GPL-3.0-or-later
+(Copyright (c) 2026 fewtarius).
 
 **llama-ai parent project:** GPL-3.0-or-later for source, CC-BY-NC-SA-4.0 for
 documentation (see the [parent project LICENSE](https://github.com/fewtarius/llama-ai/blob/main/LICENSE)).
