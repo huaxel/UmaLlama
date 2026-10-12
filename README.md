@@ -320,6 +320,9 @@ build flags — everything is runtime config via the CLI flags above.
 
 ## Documentation
 
+- [Ecosystem & Upstream PR Strategy](docs/ecosystem-and-upstream-strategy.md) —
+  comparative analysis of Strix Halo engines (strix-llama, Gufo, Strata, Halogen)
+  and UmaLLama's upstream-first PR alignment methodology
 - [Parent project (fewtarius/llama-ai)](https://github.com/fewtarius/llama-ai) — runner
   scripts, GPU detection, benchmarks, end-to-end install
 - [CLIO](https://github.com/SyntheticAutonomicMind/CLIO) — agentic AI client
@@ -336,13 +339,13 @@ build flags — everything is runtime config via the CLI flags above.
 
 ## Relationship with upstream llama.cpp
 
-UmaLLama tracks upstream `llama.cpp` master through periodic merges while carrying optimizations tuned for shared-memory hardware:
+UmaLLama stays as close to upstream `llama.cpp` as possible. Every carry and optimization is structured to be candidate-PR ready:
 
-- **Upstream sync:** Merged periodically; features landing upstream are rebased onto stock implementations.
-- **Carried optimizations:** External performance PRs and fork carries (Nathanw1014 flash-attention shaders, RDNA3.5 tuning) are maintained until upstreamed.
-- **UmaLLama originals:** Persistent KV cache, MoE expert residency, Lightning Indexer, DFlash/Laguna, user isolation, and Vulkan APU tuning.
+- **Upstream sync:** Merged periodically; features landing upstream are immediately dropped in favor of stock implementations.
+- **Upstream PR candidates:** Self-contained shader optimizations, driver probes, and host utilities are maintained in clean, upstream-PR-ready form.
+- **Modular agent extensions:** Subsystems (persistent SSD KV cache, MoE residency paging) are decoupled in `common/` or non-invasive hooks so upstream merges stay conflict-free.
 
-See [AGENTS.md](AGENTS.md) and [docs/patch-set-status.md](docs/patch-set-status.md) for the active carry table and conventions.
+See [docs/ecosystem-and-upstream-strategy.md](docs/ecosystem-and-upstream-strategy.md), [AGENTS.md](AGENTS.md), and [docs/patch-set-status.md](docs/patch-set-status.md) for details.
 
 ---
 
