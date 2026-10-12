@@ -323,6 +323,8 @@ build flags — everything is runtime config via the CLI flags above.
 - [Ecosystem & Upstream PR Strategy](docs/ecosystem-and-upstream-strategy.md) —
   comparative analysis of Strix Halo engines (strix-llama, Gufo, Strata, Halogen)
   and UmaLLama's upstream-first PR alignment methodology
+- [Feature Backlog & Roadmap](docs/backlog.md) — prioritized upstream-PR-ready
+  backlog (native BF16 KV, atomic slot rollback, dynamic KV quantization, MoE overlap)
 - [Parent project (fewtarius/llama-ai)](https://github.com/fewtarius/llama-ai) — runner
   scripts, GPU detection, benchmarks, end-to-end install
 - [CLIO](https://github.com/SyntheticAutonomicMind/CLIO) — agentic AI client

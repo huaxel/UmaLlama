@@ -105,3 +105,15 @@ These subsystems provide UmaLLama's unique agentic throughput features. They are
      git diff --name-only upstream/master | grep -E '\.(c|cpp|h|hpp)$' | xargs clang-format --dry-run -Werror
      ```
 4. **Isolate Feature Flags:** Gating controls for experimental or platform-specific optimizations must use environment variables (`GGML_VK_*` or `LLAMA_ARG_*`) so baseline behavior matches upstream defaults.
+
+---
+
+## 5. Prioritized Feature Backlog
+
+See [`docs/backlog.md`](backlog.md) for the active, detailed backlog of features adapted from `strix-llama`, `Gufo`, and `Strata`, prioritized by leverage and upstream PR viability:
+
+1. **Native BF16 KV-Cache FlashAttention on RDNA 3.5** (Tier 1: Upstream PR Candidate)
+2. **Atomic Agentic Cancellation & Slot State Rollback** (Tier 1: Upstream PR Candidate)
+3. **Dynamic Context-Thresholded KV Cache Quantization** (Tier 1: Upstream PR Candidate)
+4. **Asynchronous MoE Expert Overlap (CPU $\parallel$ GPU)** (Tier 2: Modular Extension)
+

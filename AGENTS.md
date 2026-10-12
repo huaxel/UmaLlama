@@ -363,6 +363,7 @@ UmaLLama's core philosophy is to **stay as close to upstream `llama.cpp` as poss
 - **Tier 1 (Direct PR Candidates):** Vulkan shader bugfixes (e.g., Lightning Indexer init-order), coopmat1 P-fragment hoisting, 32-wide subgroup pinning, and APU `nodes_per_submit` tuning are maintained in upstream-PR-ready form.
 - **Tier 2 (Modular Extensions):** Out-of-tree agentic features (persistent SSD KV cache in `common/`, MoE kernel paging in `src/llama-moe-residency.cpp`) must remain cleanly decoupled from core tensor execution graphs to ensure upstream merges stay conflict-free.
 - **Ecosystem Survey:** See [docs/ecosystem-and-upstream-strategy.md](docs/ecosystem-and-upstream-strategy.md) for a detailed architectural comparison of UmaLLama against `strix-llama`, Gufo, Strata, and Halogen.
+- **Candidate Feature Backlog:** See [docs/backlog.md](docs/backlog.md) for prioritized PR-ready work items (native BF16 KV, atomic slot rollback, dynamic KV quantization, MoE async overlap).
 
 ### Upstream merge
 
