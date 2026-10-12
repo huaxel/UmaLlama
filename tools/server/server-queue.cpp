@@ -584,6 +584,7 @@ server_response_reader::batch_response server_response_reader::wait_for_all(cons
     while (has_next()) {
         auto res = next(should_stop);
         if (res == nullptr) {
+            stop();
             batch_res.is_terminated = true;
             return batch_res;
         }

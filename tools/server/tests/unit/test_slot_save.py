@@ -789,3 +789,40 @@ def test_slot_restore_checkpoints_draft_kv_type_change(swa_server, ctkd_restore)
     })
     assert res.status_code == 200
     assert res.body["timings"]["prompt_n"] == n_live
+
+
+def test_slot_cancel_atomic_rollback():
+    global server
+    server.start()
+
+    prompt = "Once upon a time in a faraway kingdom, there lived a kind king and queen who loved their people dearly."
+
+    # Start a streaming generation on slot 0 with a large n_predict, then abort early
+    chunks = []
+    for data in server.make_stream_request("POST", "/completion", data={
+        "prompt": prompt,
+        "id_slot": 0,
+        "cache_prompt": True,
+        "n_predict": 100,
+        "stream": True,
+    }):
+        if data.get("content"):
+            chunks.append(data["content"])
+        if len(chunks) >= 3:
+            # Client aborts/cancels after 3 tokens
+            break
+
+    time.sleep(0.1)
+
+    # Next request with the same prompt on slot 0:
+    # Atomic rollback restored the prompt boundary, so prompt is 100% cached.
+    res = server.make_request("POST", "/completion", data={
+        "prompt": prompt,
+        "id_slot": 0,
+        "cache_prompt": True,
+        "n_predict": 10,
+    })
+    assert res.status_code == 200
+    assert res.body["timings"]["prompt_n"] <= 1
+    assert res.body["tokens_cached"] > 10
+

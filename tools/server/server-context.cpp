@@ -3305,6 +3305,107 @@ private:
         return n_read;
     }
 
+    void rollback_slot_on_cancel(server_slot & slot) {
+        if (!slot.task || slot.task->type != SERVER_TASK_TYPE_COMPLETION) {
+            return;
+        }
+
+        // Clean up speculative decoding state if active
+        if (slot.can_speculate()) {
+            slot.spec_draft.clear();
+            slot.spec_i_batch.clear();
+            slot.spec_ckpt.clear();
+        }
+
+        if (slot.deferred_final_checkpoint) {
+            slot.deferred_final_checkpoint = false;
+        }
+
+        if (slot.state == SLOT_STATE_GENERATING || slot.state == SLOT_STATE_DONE_PROMPT) {
+            const int32_t n_prompt = slot.task->n_tokens();
+            SLT_INF(slot, "atomic rollback: cancelling active generation, prompt=%d tokens, n_gen=%d\n", n_prompt,
+                    (int) slot.stats.n_gen);
+
+            // Attempt to restore exact prompt checkpoint if available
+            bool restored_from_ckpt = false;
+            for (auto it = slot.prompt.checkpoints.rbegin(); it != slot.prompt.checkpoints.rend(); ++it) {
+                if (it->pos_min == 0 && (it->pos_max == n_prompt - 1 || it->n_tokens == (int64_t) n_prompt)) {
+                    if (it->load_tgt(ctx_tgt, slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY)) {
+                        if (ctx_dft) {
+                            it->load_dft(ctx_dft, slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
+                        }
+                        restored_from_ckpt = true;
+                        SLT_INF(slot, "atomic rollback: restored prompt checkpoint covering %d tokens (pos_max=%d)\n",
+                                n_prompt, it->pos_max);
+                        break;
+                    }
+                }
+            }
+
+            if (!restored_from_ckpt && ssd_page_manager) {
+                static const llama_tokens no_tokens;
+                const auto & prefix_tokens = slot.task->tokens.has_mtmd ? no_tokens : slot.task->tokens.get_tokens();
+                if (!prefix_tokens.empty()) {
+                    uint64_t conv_hash = kv_ssd_hash_tokens((const uint32_t *) prefix_tokens.data(),
+                                                            std::min(prefix_tokens.size(), (size_t) 1024));
+                    if (conv_hash == 0) {
+                        conv_hash = 1;
+                    }
+                    int32_t  out_pmin = 0, out_pmax = 0;
+                    uint64_t out_ntok = 0;
+                    if (ssd_page_manager->find_and_load_checkpoint(
+                            prefix_tokens.data(), prefix_tokens.size(), ssd_turn_counter, ctx_tgt, ctx_dft, slot.id,
+                            out_pmin, out_pmax, out_ntok, nullptr, conv_hash, -1, n_prompt, nullptr, nullptr, nullptr,
+                            nullptr, slot.task->user_id)) {
+                        restored_from_ckpt = true;
+                        SLT_INF(slot,
+                                "atomic rollback: restored prompt boundary from SSD cache, n_tokens=%" PRIu64 "\n",
+                                out_ntok);
+                    }
+                }
+            }
+
+            if (!restored_from_ckpt) {
+                if (ctx_tgt_seq_rm_type == COMMON_CONTEXT_SEQ_RM_TYPE_PART) {
+                    slot.prompt.tokens.keep_first(n_prompt);
+                    const llama_pos prompt_pos_next = slot.prompt.tokens.pos_next();
+                    slot.mem.seq_rm(slot.id, prompt_pos_next, -1);
+                    if (ctx_dft) {
+                        llama_memory_seq_rm(llama_get_memory(ctx_dft), slot.id, prompt_pos_next, -1);
+                    }
+                    SLT_INF(slot, "atomic rollback: trimmed KV cache and prompt tokens to %d tokens (pos_next=%d)\n",
+                            n_prompt, prompt_pos_next);
+                } else {
+                    SLT_WRN(slot, "%s",
+                            "atomic rollback: recurrent state without checkpoint cannot rewind, clearing prompt\n");
+                    slot.prompt_clear();
+                    return;
+                }
+            } else {
+                slot.prompt.tokens.keep_first(n_prompt);
+            }
+
+            slot.generated = {};
+            slot.generated_tokens.clear();
+            slot.generated_token_probs.clear();
+            slot.stats.n_gen = 0;
+            slot.n_sent_text = 0;
+        } else if (slot.state == SLOT_STATE_PROCESSING_PROMPT) {
+            const int32_t prompt_cached = slot.stats.n_prompt_cached;
+            SLT_INF(slot, "atomic rollback: cancelling prompt processing, cached_prefix=%d\n", prompt_cached);
+            if (prompt_cached > 0) {
+                slot.prompt.tokens.keep_first(prompt_cached);
+                const llama_pos prompt_pos_next = slot.prompt.tokens.pos_next();
+                slot.mem.seq_rm(slot.id, prompt_pos_next, -1);
+                if (ctx_dft) {
+                    llama_memory_seq_rm(llama_get_memory(ctx_dft), slot.id, prompt_pos_next, -1);
+                }
+            } else {
+                slot.prompt_clear();
+            }
+        }
+    }
+
     // returns false to decline the task, it is offered again after the decode is done
     bool process_single_task(server_task && task, bool is_yielding) {
         // while yielding, an encode / decode is running and only reading the server state is safe
@@ -3398,6 +3499,7 @@ private:
                     // release slot linked with the task id
                     for (auto & slot : slots) {
                         if (slot.task && slot.task->id == task.id_target) {
+                            rollback_slot_on_cancel(slot);
                             slot.release();
                             break;
                         }
@@ -5928,6 +6030,7 @@ std::unique_ptr<server_res_generator> server_routes::handle_completions_impl(
             try {
                 if (effective_should_stop()) {
                     SRV_DBG("%s", "stopping streaming due to should_stop condition\n");
+                    res_this->rd.stop();
                     return false; // should_stop condition met
                 }
 
@@ -5980,6 +6083,7 @@ std::unique_ptr<server_res_generator> server_routes::handle_completions_impl(
                 if (result == nullptr) {
                     SRV_DBG("%s", "stopping streaming due to should_stop condition\n");
                     GGML_ASSERT(effective_should_stop());
+                    res_this->rd.stop();
                     return false; // should_stop condition met
                 }
 
