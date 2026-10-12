@@ -12,11 +12,11 @@
 //   added in ggml-org#21510 for SWA models (Gemma 4) where a deferred-final
 //   snapshot legitimately has pos_min=0.
 //
-//   CachyLLama's role-based XML trim (no CSSS) means a pos_min=0 snapshot is
+//   UmaLLama's role-based XML trim (no CSSS) means a pos_min=0 snapshot is
 //   only valid for the exact prompt that produced it. When the agent trims
 //   dialog between turns, the LCP between the new task and the slot's stored
 //   prompt drops, and the unconditional `pos_min == 0` clause accepts a
-//   stale snapshot from a previous turn. The CachyLLama fix is to drop the
+//   stale snapshot from a previous turn. The UmaLLama fix is to drop the
 //   `cur.pos_min == 0` clause and rely on the `n_swa > 0` SWA filter
 //   above plus the `pos_min < pos_min_thold` mid-prompt gate.
 //

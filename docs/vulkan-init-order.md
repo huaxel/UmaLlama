@@ -15,7 +15,7 @@ The four flag assignments were moved to **after** the `subgroup_size_control_fea
 
 `VK_EXT_subgroup_size_control` lets the application request a specific subgroup size (32, 64, etc.). Vulkan implementations only honor that request when `computeFullSubgroups` is true — otherwise the implementation is allowed to use a smaller subgroup size than requested, which silently breaks shaders that depend on the requested size for correctness.
 
-The four CachyLLama-original fused ops (Lightning Indexer plus the three DSV4 hyper-connection shaders) all pin `required_subgroup_size = 32` and assume the subgroup size contract holds. Gating them on `computeFullSubgroups` ensures the request is actually granted before we say "yes, this device supports the op."
+The four UmaLLama-original fused ops (Lightning Indexer plus the three DSV4 hyper-connection shaders) all pin `required_subgroup_size = 32` and assume the subgroup size contract holds. Gating them on `computeFullSubgroups` ensures the request is actually granted before we say "yes, this device supports the op."
 
 ## Verification checklist
 

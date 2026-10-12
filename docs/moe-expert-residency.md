@@ -1,10 +1,10 @@
 # MoE Expert Residency
 
-Enable running Mixture-of-Experts (MoE) models whose total footprint exceeds available system RAM by keeping only the active expert subset paged in and letting cold expert pages spill to the SSD via `madvise`. On Linux with NVMe, the kernel handles the actual I/O through the page cache; CachyLLama just steers it via `MADV_WILLNEED` (hot path) and `MADV_COLD` (cold path) hints.
+Enable running Mixture-of-Experts (MoE) models whose total footprint exceeds available system RAM by keeping only the active expert subset paged in and letting cold expert pages spill to the SSD via `madvise`. On Linux with NVMe, the kernel handles the actual I/O through the page cache; UmaLLama just steers it via `MADV_WILLNEED` (hot path) and `MADV_COLD` (cold path) hints.
 
 ## Policy vs. physical residency
 
-CachyLLama controls a *software policy* (which experts should be in the working set). The Linux kernel controls *physical residency* (which pages are actually in RAM). These are not the same thing:
+UmaLLama controls a *software policy* (which experts should be in the working set). The Linux kernel controls *physical residency* (which pages are actually in RAM). These are not the same thing:
 
 - `madvise()` is advisory. The kernel is free to ignore the hint, evict pages anyway, or keep cold pages resident under low memory pressure.
 - An expert is "loaded" in our cache the moment we call `MADV_WILLNEED` on it — but the kernel may have already had those pages resident (so the call is a no-op), or may have decided to evict them despite the hint.
@@ -42,7 +42,7 @@ The subsystem has three pieces:
 
 1. **Per-token expert selection capture** — `track_expert_activations()` reads the MoE routing tensors (`ffn_moe_argsort-<layer>`, `ffn_moe_topk-<layer>`, or `ffn_moe_probs-<layer>`) from the compute graph after each decode and stores the top-K selected expert IDs per layer in `llama_context::expert_stats`.
 2. **Per-layer recency+frequency cache** — a fixed-size pool of expert slots per MoE layer. Each decode's selection touches the relevant slots (marking them hot), promotes them by recency/frequency score, and evicts the lowest-scoring slot via `MADV_COLD` when the layer's resident set overflows.
-3. **Cross-session co-activation matrix** — records per-layer and cross-layer expert co-firing counts. Saved to `~/.cachylla/coactivation/{model}.json` on context destruction; reloaded on init. Used to inform future prewarm decisions and (in Phase 2+ planning) predictive prefetch.
+3. **Cross-session co-activation matrix** — records per-layer and cross-layer expert co-firing counts. Saved to `~/.umallama/coactivation/{model}.json` on context destruction; reloaded on init. Used to inform future prewarm decisions and (in Phase 2+ planning) predictive prefetch.
 
 ### Why `madvise` and not explicit `pread`
 
@@ -197,7 +197,7 @@ on touch: any newly-fired expert that wasn't resident gets MADV_WILLNEED
 co-activation matrix records per-layer and cross-layer pair counts
 ```
 
-The per-layer R+F cache is sized by `max_resident_per_layer`. The cross-session co-activation matrix is persisted to `~/.cachylla/coactivation/{model}.json` on graceful shutdown (SIGTERM; SIGKILL bypasses this) and reloaded on the next context init if available.
+The per-layer R+F cache is sized by `max_resident_per_layer`. The cross-session co-activation matrix is persisted to `~/.umallama/coactivation/{model}.json` on graceful shutdown (SIGTERM; SIGKILL bypasses this) and reloaded on the next context init if available.
 
 ## Why R+F cache and not pure LRU
 
@@ -227,7 +227,7 @@ The cache hit rate drops if `--moe-resident-per-layer` is too small to cover the
 
 ## Persistence
 
-The co-activation matrix is saved to `~/.cachylla/coactivation/{model}.json` on context destruction (graceful shutdown via SIGTERM; SIGKILL bypasses this). Reloaded on next context init if available.
+The co-activation matrix is saved to `~/.umallama/coactivation/{model}.json` on context destruction (graceful shutdown via SIGTERM; SIGKILL bypasses this). Reloaded on next context init if available.
 
 The file is plain JSON, ~1-10 MB depending on model size. Schema:
 

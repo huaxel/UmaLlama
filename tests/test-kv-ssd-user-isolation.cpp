@@ -50,7 +50,7 @@ static int test_process_id() {
 
 static std::string make_temp_dir(const std::string & tag) {
     char buf[256];
-    std::snprintf(buf, sizeof(buf), "cachyllama-ssd-test-%s-%d",
+    std::snprintf(buf, sizeof(buf), "umallama-ssd-test-%s-%d",
                   tag.c_str(), test_process_id());
     const std::string dir = (fs::temp_directory_path() / buf).string();
     fs::remove_all(dir);

@@ -7,7 +7,7 @@
 // adjacent layers. After enough observation, the matrix can predict which
 // experts are likely to fire next given the currently-selected experts.
 //
-// Persistence: the matrix is saved to ~/.cachylla/coactivation/{model}.json
+// Persistence: the matrix is saved to ~/.umallama/coactivation/{model}.json
 // and reloaded on context init if available. This makes predictions useful
 // even on the first token of a session for previously-seen models.
 

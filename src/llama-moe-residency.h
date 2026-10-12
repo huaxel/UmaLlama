@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2026 fewtarius
 //
-// MoE expert residency tracker for CachyLLama.
+// MoE expert residency tracker for UmaLLama.
 //
 // Phase 1: tracks which MoE experts are "hot" per layer via a per-layer LRU.
 // Uses madvise(MADV_WILLNEED / MADV_DONTNEED) on the existing mmap'd model

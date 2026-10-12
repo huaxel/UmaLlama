@@ -22,7 +22,7 @@ generation tokens), so Vulkan is the default backend for the 7840U.
 - GTT: 16 GB (`amdgpu.gttsize=18432`) - bumped from default 12 GB to fit 35B Q4
 - System RAM: 32 GB total, 25 GB available to OS after carveout
 - Mesa driver: RADV (open source)
-- Build: CachyLLama `71d1e8f2f` Vulkan backend
+- Build: UmaLLama `71d1e8f2f` Vulkan backend
 - Wave size: 64 (RDNA, not 32 like CDNA)
 - Subgroup: KHR_coopmat supported, KHR_coopmat2 not (Phoenix is RDNA3.0)
 
@@ -116,7 +116,7 @@ is what we'd want to compare against before declaring a tuning win.
 ## Post-rebase validation (2026-09-29, Strix Halo gfx1151, RADV)
 
 After rebasing onto upstream master (680a03628), `test-backend-ops` on
-Vulkan0 (Radeon 8060S) found two CachyLLama perf features producing wrong
+Vulkan0 (Radeon 8060S) found two UmaLLama perf features producing wrong
 results against the refactored upstream shaders. Both were root-caused
 and fixed the same day; both are back to default-on with `=0` opt-outs.
 Validate with:

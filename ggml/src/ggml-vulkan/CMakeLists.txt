@@ -122,7 +122,7 @@ if (Vulkan_FOUND)
     target_link_libraries(ggml-vulkan PRIVATE Vulkan::Vulkan)
     target_include_directories(ggml-vulkan PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
-    # CachyLLama: FA quant-KV dequant-scratch gate calls common::host_available_ram().
+    # UmaLLama: FA quant-KV dequant-scratch gate calls common::host_available_ram().
     # host-ram.cpp is in common/, but linking ggml-vulkan against llama-common creates a
     # cyclic dep (llama-common already depends on ggml-vulkan). Compile the single TU
     # directly into ggml-vulkan instead. The function is small and self-contained.

@@ -63,7 +63,9 @@ struct vk_mat_mat_id_push_constants {
     uint32_t batch_stride_a; uint32_t batch_stride_b; uint32_t batch_stride_d;
     uint32_t nei0; uint32_t nei1; uint32_t nbi1; uint32_t ne11;
     uint32_t n_experts;
-    uint32_t row_ids_offset;    uint32_t fusion_flags;
+    uint32_t row_ids_offset;
+    // UmaLLama: fused MUL epilogue flags; 0 = plain D store (upstream behavior)
+    uint32_t fusion_flags;
 };
 
 struct vk_mat_vec_id_push_constants {

@@ -1,8 +1,8 @@
-# CachyLLama
+# UmaLLama
 
 A performance-focused fork of [llama.cpp](https://github.com/ggml-org/llama.cpp) for
 running local LLM inference on AMD APU hardware — integrated GPUs, handhelds,
-and any system with shared memory. CachyLLama tracks upstream `llama.cpp`
+and any system with shared memory. UmaLLama tracks upstream `llama.cpp`
 closely but diverges freely where performance is on the line: we cherry-pick
 from upstream PRs, borrow from other forks, and ship our own optimizations.
 If a change makes inference faster on lower-spec hardware, it has a home here
@@ -12,13 +12,13 @@ regardless of where it originated.
 [![Upstream: ggml-org/llama.cpp](https://img.shields.io/badge/upstream-ggml--org%2Fllama.cpp-orange.svg)](https://github.com/ggml-org/llama.cpp)
 [![Parent project: fewtarius/llama-ai](https://img.shields.io/badge/parent-fewtarius%2Fllama--ai-green.svg)](https://github.com/fewtarius/llama-ai)
 
-[CachyLLama parent project](https://github.com/fewtarius/llama-ai) / [CLIO agentic client](https://github.com/SyntheticAutonomicMind/CLIO) / [Upstream llama.cpp](https://github.com/ggml-org/llama.cpp) / [ggml](https://github.com/ggml-org/ggml)
+[llama-ai parent project](https://github.com/fewtarius/llama-ai) / [CLIO agentic client](https://github.com/SyntheticAutonomicMind/CLIO) / [Upstream llama.cpp](https://github.com/ggml-org/llama.cpp) / [ggml](https://github.com/ggml-org/ggml)
 
 ---
 
 ## Overview
 
-CachyLLama is the C++ inference engine of the [CachyLLama ecosystem](https://github.com/fewtarius/llama-ai). While upstream `llama.cpp` focuses on raw token execution, CachyLLama optimizes for **end-to-end agentic throughput** on shared-memory AMD APU hardware (18–30K prompt contexts on 5–20 t/s hardware).
+UmaLLama is the C++ inference engine of the [llama-ai ecosystem](https://github.com/fewtarius/llama-ai). While upstream `llama.cpp` focuses on raw token execution, UmaLLama optimizes for **end-to-end agentic throughput** on shared-memory AMD APU hardware (18–30K prompt contexts on 5–20 t/s hardware).
 
 - **This repository:** Core C++ inference engine with persistent KV caching, MoE residency paging, fused Vulkan shaders, and APU tuning.
 - **Turnkey installation:** The [parent project](https://github.com/fewtarius/llama-ai) provides automated hardware detection, ISA tuning, runner scripts, and benchmarks.
@@ -49,7 +49,7 @@ checkpoint restoration.
 An in-memory ring of serialized KV state blobs for **agentic interleaving** (where an agent makes divergent sub-queries before resuming main context):
 
 - **Multi-slot enabled (`--parallel > 1`):** Accumulates divergent state across idle slots so longest-common-prefix (LCP) matching can hot-swap tasks without full reprocessing.
-- **Single-slot efficiency:** In single-slot setups, CachyLLama automatically skips RAM serialization round-trips; the zero-cost VRAM checkpoint ring (`slot.prompt.checkpoints`) handles prefix restores directly.
+- **Single-slot efficiency:** In single-slot setups, UmaLLama automatically skips RAM serialization round-trips; the zero-cost VRAM checkpoint ring (`slot.prompt.checkpoints`) handles prefix restores directly.
 
 ### MoE expert management
 
@@ -58,7 +58,7 @@ Four subsystems work together to execute MoE models larger than physical RAM:
 - **Activation tracking:** Endpoints (`/expert-stats`, `/expert-tracking`) and C API (`llama_expert_stats_get`) provide real-time per-layer activation counts.
 - **SSD residency (`--moe-expert-residency`):** Tracks recency and frequency, using `madvise(MADV_WILLNEED)` to keep hot experts paged in RAM while cold weights remain mmap'd on SSD (validated hit rates: 95.5% on Qwen3.6-35B-A3B, 89.5% on GLM-4.7-Flash).
 - **Host-RAM offload (`--cpu-moe`):** Directs MoE FFN weights to host RAM via `tensor_buft_overrides` while keeping attention on GPU, allowing 30–90 GB MoE quants to run on 32 GB unified memory.
-- **Co-activation tracking:** Persists a per-layer joint-activation matrix (`~/.cachylla/coactivation/{model}.json`) to prewarm correlated expert pairs together.
+- **Co-activation tracking:** Persists a per-layer joint-activation matrix (`~/.umallama/coactivation/{model}.json`) to prewarm correlated expert pairs together.
 
 ### User isolation
 
@@ -135,7 +135,7 @@ Generation holds steady at 36–38 t/s across all turns.
 
 ---
 
-## CachyLLama CLI flags
+## UmaLLama CLI flags
 
 ### SSD cache
 
@@ -163,7 +163,7 @@ Generation holds steady at 36–38 t/s across all turns.
 |------|---------|-------------|
 | `--cache-ram N` | 8192 | Host-memory prompt cache size in MiB. Only useful with `--parallel > 1`; with a single slot the save+load round-trip is a no-op (skipped automatically). Set to 0 to disable. `-1` for no limit. |
 | `--cache-idle-slots` | enabled | Save idle slots to the prompt cache on new task. Requires `--cache-ram > 0`. With `--kv-unified`, idle slots are also cleared to make room for new tasks. |
-| `--parallel N` (`-np`) | 1 | Number of server slots. Each slot holds its own KV cache; multiple slots let several conversations run concurrently without blocking each other. CachyLLama's parent launcher (`llama-run.sh`) defaults to 1; raise to 2+ to host multiple agent sessions. Per-slot KV memory cost is `n_ctx * layer_count * head_dim * 2 (K+V) * dtype_bytes`. |
+| `--parallel N` (`-np`) | 1 | Number of server slots. Each slot holds its own KV cache; multiple slots let several conversations run concurrently without blocking each other. UmaLLama's parent launcher (`llama-run.sh`) defaults to 1; raise to 2+ to host multiple agent sessions. Per-slot KV memory cost is `n_ctx * layer_count * head_dim * 2 (K+V) * dtype_bytes`. |
 
 ### User isolation
 
@@ -294,7 +294,7 @@ llama_moe_residency_disable(ctx);
 
 ---
 
-## Building CachyLLama
+## Building UmaLLama
 
 For end-to-end install (runner scripts, GPU detection, benchmark harness, GTT
 configuration), use the [parent project](https://github.com/fewtarius/llama-ai):
@@ -313,17 +313,17 @@ cmake -B build -DGGML_VULKAN=ON
 cmake --build build --config Release -j$(nproc)
 ```
 
-All standard `llama.cpp` build options are supported. CachyLLama adds no new
+All standard `llama.cpp` build options are supported. UmaLLama adds no new
 build flags — everything is runtime config via the CLI flags above.
 
 ---
 
 ## Documentation
 
-- [CachyLLama parent project](https://github.com/fewtarius/llama-ai) — runner
+- [Parent project (fewtarius/llama-ai)](https://github.com/fewtarius/llama-ai) — runner
   scripts, GPU detection, benchmarks, end-to-end install
 - [CLIO](https://github.com/SyntheticAutonomicMind/CLIO) — agentic AI client
-  optimized for CachyLLama's persistent cache
+  optimized for UmaLLama's persistent cache
 - [User isolation design](docs/development/user-isolation-design.md) —
   architecture for the `user_id` / `u/` namespace / `--max-concurrent-per-user`
   features
@@ -336,11 +336,11 @@ build flags — everything is runtime config via the CLI flags above.
 
 ## Relationship with upstream llama.cpp
 
-CachyLLama tracks upstream `llama.cpp` master through periodic merges while carrying optimizations tuned for shared-memory hardware:
+UmaLLama tracks upstream `llama.cpp` master through periodic merges while carrying optimizations tuned for shared-memory hardware:
 
 - **Upstream sync:** Merged periodically; features landing upstream are rebased onto stock implementations.
 - **Carried optimizations:** External performance PRs and fork carries (Nathanw1014 flash-attention shaders, RDNA3.5 tuning) are maintained until upstreamed.
-- **CachyLLama originals:** Persistent KV cache, MoE expert residency, Lightning Indexer, DFlash/Laguna, user isolation, and Vulkan APU tuning.
+- **UmaLLama originals:** Persistent KV cache, MoE expert residency, Lightning Indexer, DFlash/Laguna, user isolation, and Vulkan APU tuning.
 
 See [AGENTS.md](AGENTS.md) and [docs/patch-set-status.md](docs/patch-set-status.md) for the active carry table and conventions.
 
@@ -348,8 +348,8 @@ See [AGENTS.md](AGENTS.md) and [docs/patch-set-status.md](docs/patch-set-status.
 
 ## License
 
-**CachyLLama source code:** MIT (same as upstream `llama.cpp`, see
-[LICENSE](LICENSE), Copyright (c) 2023-2026 The ggml authors). Core CachyLLama
+**UmaLLama source code:** MIT (same as upstream `llama.cpp`, see
+[LICENSE](LICENSE), Copyright (c) 2023-2026 The ggml authors). Core UmaLLama
 additions — the persistent KV cache, user isolation, Lightning Indexer, Vulkan
 shader work, DFlash/Laguna model support, and the `common::host_available_ram()`
 utility — are released under MIT terms. The MoE expert residency and
