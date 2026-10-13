@@ -396,6 +396,8 @@ extern "C" {
         enum ggml_type type_k; // data type for K cache [EXPERIMENTAL]
         enum ggml_type type_v; // data type for V cache [EXPERIMENTAL]
 
+        uint32_t kv_quant_threshold; // context length threshold (in tokens) above which KV cache shifts from FP16 to quantized type_k/type_v (0 = immediate/disabled)
+
         size_t moe_cache_size; // device cache in bytes for the experts kept in host memory, split among the devices like the layers, 0 = disabled [EXPERIMENTAL]
 
         // Abort callback

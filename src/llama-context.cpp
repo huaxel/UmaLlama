@@ -360,9 +360,10 @@ llama_context::llama_context(
         }
     }
 
-    cparams.op_offload     = params.op_offload;
-    cparams.kv_unified     = params.kv_unified;
-    cparams.moe_cache_size = params.moe_cache_size;
+    cparams.op_offload         = params.op_offload;
+    cparams.kv_unified         = params.kv_unified;
+    cparams.kv_quant_threshold = params.kv_quant_threshold;
+    cparams.moe_cache_size     = params.moe_cache_size;
 
     // initialized later
     cparams.pipeline_parallel = false;
@@ -4353,6 +4354,7 @@ llama_context_params llama_context_default_params() {
         /*.cb_eval_user_data           =*/ nullptr,
         /*.type_k                      =*/ GGML_TYPE_F16,
         /*.type_v                      =*/ GGML_TYPE_F16,
+        /*.kv_quant_threshold          =*/ 0,
         /*.moe_cache_size              =*/ 0,
         /*.abort_callback              =*/ nullptr,
         /*.abort_callback_data         =*/ nullptr,

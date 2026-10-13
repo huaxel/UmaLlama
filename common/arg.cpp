@@ -2566,6 +2566,17 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_env("LLAMA_ARG_CACHE_TYPE_V"));
     add_opt(common_arg(
+        {"--kv-quant-threshold"}, "N",
+        string_format("context token threshold above which KV cache activates quantization (default: %u)",
+                      params.kv_quant_threshold),
+        [](common_params & params, int value) {
+            if (value < 0) {
+                throw std::invalid_argument("must be >= 0");
+            }
+            params.kv_quant_threshold = (uint32_t) value;
+        }
+    ).set_env("LLAMA_ARG_KV_QUANT_THRESHOLD"));
+    add_opt(common_arg(
         {"--hellaswag"},
         "compute HellaSwag score over random tasks from datafile supplied with -f",
         [](common_params & params) {
@@ -2935,94 +2946,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             else { throw std::invalid_argument("invalid value"); }
         }
     ).set_env("LLAMA_ARG_LAZY_MODE"));
-    add_opt(common_arg(
-        {"-lm", "--load-mode"}, "MODE",
-        "model loading mode (default: mmap)\n"
-        "- none: no special loading mode\n"
-        "- mmap: memory-map model (if mmap disabled, slower load but may reduce pageouts if not using mlock)\n"
-        "- mlock: mmap + force system to keep model in RAM rather than swapping or compressing\n"
-        "- dio: use DirectIO if available\n",
-        [](common_params & params, const std::string & value) {
-            /**/ if (value == "none")  { params.load_mode = LLAMA_LOAD_MODE_NONE;      }
-            else if (value == "mmap")  { params.load_mode = LLAMA_LOAD_MODE_MMAP;      }
-            else if (value == "mlock") { params.load_mode = LLAMA_LOAD_MODE_MLOCK;     }
-            else if (value == "dio")   { params.load_mode = LLAMA_LOAD_MODE_DIRECT_IO; }
-            else { throw std::invalid_argument("invalid value"); }
-        }
-    ).set_env("LLAMA_ARG_LOAD_MODE"));
-    add_opt(common_arg(
-        {"-moe-res", "--moe-expert-residency"},
-        {"-nmoe-res", "--no-moe-expert-residency"},
-        string_format("enable MoE expert residency tracking (reduces physical memory pressure of MoE models via madvise). "
-                      "Requires --load-mode mmap. (default: %s)", params.moe_expert_residency ? "enabled" : "disabled"),
-        [](common_params & params, bool value) {
-            params.moe_expert_residency = value;
-            if (value && params.load_mode != LLAMA_LOAD_MODE_MMAP) {
-                fprintf(stderr, "warning: --moe-expert-residency requires --load-mode mmap; ignoring\n");
-                params.moe_expert_residency = false;
-            }
-        }
-    ).set_env("LLAMA_ARG_MOE_EXPERT_RESIDENCY"));
-    add_opt(common_arg(
-        {"-moe-res-k", "--moe-resident-per-layer"}, "N",
-        string_format("max experts kept hot per MoE layer (default: %d)", params.moe_resident_per_layer),
-        [](common_params & params, int value) {
-            if (value <= 0) {
-                throw std::invalid_argument("must be positive");
-            }
-            params.moe_resident_per_layer = value;
-        }
-    ).set_env("LLAMA_ARG_MOE_RESIDENT_PER_LAYER"));
-    add_opt(common_arg(
-        {"-moe-pwk", "--moe-prewarm-top-k"}, "N",
-        string_format("experts to prewarm per layer at startup (default: %d)", params.moe_residency_top_k),
-        [](common_params & params, int value) {
-            if (value < 0) {
-                throw std::invalid_argument("must be >= 0");
-            }
-            params.moe_residency_top_k = value;
-        }
-    ).set_env("LLAMA_ARG_MOE_PREWARM_TOP_K"));
-    add_opt(common_arg(
-        {"--moe-residency-debug"}, "[on|off]",
-        "periodically sample each tracked expert's pages via mincore() "
-        "and log the physical residency ratio alongside the software "
-        "policy state. Linux only. (default: off)",
-        [](common_params & params, const std::string & value) {
-            if (is_truthy(value))       params.moe_residency_debug = true;
-            else if (is_falsey(value))  params.moe_residency_debug = false;
-            else throw std::invalid_argument("invalid value");
-        }
-    ).set_env("LLAMA_ARG_MOE_RESIDENCY_DEBUG"));
-    add_opt(common_arg(
-        {"-moe-rdint", "--moe-residency-debug-interval"}, "N",
-        "decodes between mincore() samples (default: %d)",
-        [](common_params & params, int value) {
-            if (value <= 0) {
-                throw std::invalid_argument("must be positive");
-            }
-            params.moe_residency_debug_interval = value;
-        }
-    ).set_env("LLAMA_ARG_MOE_RESIDENCY_DEBUG_INTERVAL"));
-    add_opt(common_arg(
-        {"-moe-pf", "--moe-prefetch"},
-        {"-nmoe-pf", "--no-moe-prefetch"},
-        string_format("asynchronously prefetch predicted next-layer MoE experts (default: %s)",
-                      params.moe_residency_prefetch ? "enabled" : "disabled"),
-        [](common_params & params, bool value) {
-            params.moe_residency_prefetch = value;
-        }
-    ).set_env("LLAMA_ARG_MOE_PREFETCH"));
-    add_opt(common_arg(
-        {"-moe-pfk", "--moe-prefetch-top-k"}, "N",
-        string_format("number of predicted experts to prefetch per layer (default: %d)", params.moe_residency_prefetch_top_k),
-        [](common_params & params, int value) {
-            if (value < 0) {
-                throw std::invalid_argument("must be >= 0");
-            }
-            params.moe_residency_prefetch_top_k = value;
-        }
-    ).set_env("LLAMA_ARG_MOE_PREFETCH_TOP_K"));
+
     add_opt(common_arg(
         {"--numa"}, "TYPE",
         "attempt optimizations that help on some NUMA systems\n"
