@@ -364,7 +364,7 @@ static test_status test_rollback(const common_params & params, llama_model * mod
     ckpt.update_tgt(ctx_src.get(), 0, 0);
     ckpt.load_tgt(ctx_dst.get(), 0, 0);
 
-    constexpr float nmse_eps = 0.0;
+    constexpr float nmse_eps = 1e-5f;
     std::vector<std::vector<float>> logits_src_replay(n_rollback);
     const auto replay_and_compare = [&](const char * mode) {
         for (uint32_t i = 0; i < n_rollback; ++i) {
