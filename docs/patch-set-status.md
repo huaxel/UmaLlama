@@ -2,6 +2,16 @@
 
 UmaLLama diverges from `upstream/master` by carrying third-party work. Re-evaluate this table when upstream merges or upstream PRs close — row status changes weekly.
 
+> **2026-10-13 audit pass:** a code-level audit of the table rows revealed drift in
+> several "Dormant / not wired" entries. The q4/q5 transpose pipelines ARE registered
+> (the upstream q8_0-only claim was wrong); `concat_transpose.comp` IS wired default-ON
+> (the carry is now indistinguishable from upstream's); the f16 contiguize shader IS
+> registered and reachable via `GGML_VK_FA_KV_CONTIG=1`; the `lightning_indexer_cm*`
+> shaders ARE registered, just not dispatched. Rows 2, 3, 8, 9, 17 below were
+> corrected. The scratch-transpose env vars previously listed in row 1
+> (`GGML_VK_NO_FA_SCRATCH_TRANSPOSE`, `GGML_VK_FA_SCRATCH_SAFETY_MB`,
+> `GGML_VK_FA_SCRATCH_FORCE`) are not in the canonical build.
+
 ## 2026-10-13 sync (`upstream/master` 77c4540ce)
 
 29 commits merged; the only fork-specific files that needed conflict resolution were
@@ -86,24 +96,24 @@ Dropped as superseded (no table rows — none existed for them):
 
 | Carry | Source | Upstream status | UmaLLama-specific additions |
 |-------|--------|-----------------|------------------------------|
-| Quantized-KV FA prefill dequant (Vulkan) | [Nathanw1014/llama.cpp#25494](https://github.com/ggml-org/llama.cpp/pull/25494) | **Merged upstream** as `dc72703fc` | Retains the UmaLLama host-RAM gate via `common::host_available_ram()`, env controls (`GGML_VK_NO_FA_SCRATCH_TRANSPOSE`, `GGML_VK_FA_SCRATCH_SAFETY_MB`, `GGML_VK_FA_SCRATCH_FORCE`), and printf-style warning. The q4/q5 and contiguize variants below are dormant in the canonical build |
-| FA dequant-once to q4_0/q4_1/q5_0/q5_1 KV | Nathanw1014 carry | **Dormant / not wired** | Shader `DEQUANT_TRANSPOSE` branches remain from `33cc3c520`, but only the upstream q8_0 transpose pipeline is registered; `GGML_VK_FA_DEQUANT_ALL` is not active |
-| FA contiguize strided f16 KV | Nathanw1014 carry | **Dormant / not wired** | `dequant_f16_transpose.comp` remains from `404732f8c`, but the canonical build does not register it and `GGML_VK_FA_KV_CONTIG` is not active |
+| Quantized-KV FA prefill dequant (Vulkan) | [Nathanw1014/llama.cpp#25494](https://github.com/ggml-org/llama.cpp/pull/25494) | **Merged upstream** as `dc72703fc` | Retains the UmaLLama host-RAM gate via `common::host_available_ram()` and printf-style warning. The scratch env vars (`GGML_VK_NO_FA_SCRATCH_TRANSPOSE`, `GGML_VK_FA_SCRATCH_SAFETY_MB`, `GGML_VK_FA_SCRATCH_FORCE`) listed in earlier versions of this row are not in the canonical build. The f16 contiguize and concat-transpose variants below are live |
+| FA dequant-once to q4_0/q4_1/q5_0/q5_1 KV | Nathanw1014 carry | **Merged upstream** as `dc72703fc` | All five `dequant_*_transpose` pipelines (q4_0/q4_1/q5_0/q5_1/q8_0) are registered and reachable via the quant-KV FA path. The f16 variant is wired as well (see next row) |
+| FA contiguize strided f16 KV | Nathanw1014 carry | **Merged upstream** as `dc72703fc` | `dequant_f16_transpose.comp` is registered and reachable when `GGML_VK_FA_KV_CONTIG=1` and the K/V rows are strided (prefill only, `neq1 >= 64`). Default off: source-indexing bug fixed 2026-09-29 but perf measurement shows a net regression (+12..+41% on Strix Halo) since the upstream FA dispatch refactor removed the strided-read penalty it was built to dodge. See `RDNA3_NOTES.md` |
 | Coopmat1 FA P-fragment hoist | Nathanw1014 carry | Not upstreamed | Hoists the P-fragment load out of the `hsv_tile` loop. Measured +5% on Qwen3.6-35B-A3B prefill, Strix Halo |
 | Coopmat1 FA Psh query-major | Nathanw1014 carry | Not upstreamed | Stores `Psh` query-major so the GEMM2 A load vectorizes |
 | 32-wide subgroup pinning (coopmat1 FA) | Nathanw1014 carry | Not upstreamed | Pins `required_subgroup_size=32` where narrowing is free on RDNA3 wave64 |
 | Bound command buffers by memory traffic | Nathanw1014 carry | **Dormant / not wired** | The canonical build still uses a fixed 100-node default; no memory-traffic bound is active |
-| Concat transpose shader | Nathanw1014 carry | **Dormant / not wired** | `concat_transpose.comp` remains in the tree, but has no generator, pipeline, dispatch, or active `GGML_VK_CONCAT_TRANSPOSE` control |
-| MMID row-list prepass | Nathanw1014 carry | **Dormant / not wired** | `mmid_row_lists.comp` and its loader helper remain in the tree, but no prepass pipeline or dispatch is registered |
+| Concat transpose shader | Nathanw1014 carry | **Merged upstream** as `dc72703fc` | `concat_transpose.comp` is generated, registered (`pipeline_concat_transpose_i32`), dispatched, and **default ON** (gated by `GGML_VK_CONCAT_TRANSPOSE`; `=0` disables). Carried since `404732f8c`; rewired default-ON in `5d5b67444` |
+| MMID row-list prepass | Nathanw1014 carry | **Dormant / partial** | `mmid_row_lists.comp` is in the tree and in the shader gen, but no `pipeline_mmid_row_lists` is created and no runtime dispatch site is registered. The per-pipeline `supports_row_lists` capability gate is wired (see `ggml_vk_create_pipeline(... bool supports_row_lists ...)`) and threads through to the per-row mmid shader readers. The legacy prepass remains as a future toggle: a fully-wired re-introduction would need the dispatch + a per-row-list shape gate |
 | MMID f16-B probe | Nathanw1014 carry | **Dormant / not wired** | No `GGML_VK_MMID_F16B` control or active probe remains in the canonical build |
-| MMID wave32 probe | Nathanw1014 carry | **Dormant / not wired** | No `GGML_VK_MMID_WAVE32` control or active probe remains in the canonical build |
+| MMID wave32 probe | Nathanw1014 carry | **Dormant / not wired** | No `GGML_VK_MMID_WAVE32` control or active probe remains in the canonical build. (`GGML_VK_FA_WAVE32` exists but is for FA, not MMID) |
 | MMID scale cache (q5_K, q4_K, superblock-amortized) | Nathanw1014 carry | **Dormant / not wired** | No active shared-memory scale-cache implementation remains in the canonical MMID path |
 | FA MMQ dot product fp32 scaling | Nathanw1014 carry | Not upstreamed | Scales the MMQ dot product in fp32 before narrowing for numerical stability |
 | FA split-K reduce shader | Nathanw1014 carry | **Upstream added** | `flash_attn_split_k_reduce.comp` is present upstream; no remaining UmaLLama-only shader delta |
 | FA top-K selection shader | Nathanw1014 carry | **Dormant / not wired** | `flash_attn_top_k.comp` remains in the tree, but the active sparse path uses upstream compacting and has no top-K pipeline registration |
 | GATED_LINEAR_ATTN | Nathanw1014 carry | **Upstream added** as `f26efa02a` | Vulkan `GGML_OP_GATED_LINEAR_ATTN` support is now upstream in `gla.comp`; no remaining UmaLLama-only shader delta |
 | DeepSeek-V4 hyper-connection fused ops | [ggml-org/llama.cpp#26578](https://github.com/ggml-org/llama.cpp/pull/26578) | **Merged upstream** | Three shaders: `dsv4_hc_{pre,comb,post}.comp`. HC hardcoded to 4. Tunable with `GGML_VK_DISABLE_DSV4_HC[_COMB\|_PRE\|_POST]=1`. Measured: prefill +16.4%, decode +41.1% on DSV4-Flash IQ3_XXS, Nimo |
-| DeepSeek-V4 Lightning Indexer | UmaLLama original plus upstream #27453 | **Upstream added** as `cb300598d`; local extensions are dormant | Upstream provides the active base `lightning_indexer.comp`; `lightning_indexer_cm.comp` and `lightning_indexer_decode_cm.comp` remain unregistered in the canonical build. See [vulkan-init-order.md](vulkan-init-order.md) |
+| DeepSeek-V4 Lightning Indexer | UmaLLama original plus upstream #27453 | **Upstream added** as `cb300598d`; local CM extensions are registered but not dispatched | Upstream provides the active base `lightning_indexer.comp`; `lightning_indexer_cm.comp` and `lightning_indexer_decode_cm.comp` are generated and registered (`pipeline_lightning_indexer_cm_f16`, `pipeline_lightning_indexer_decode_cm_f16`) but have no dispatch site in the canonical build. See [vulkan-init-order.md](vulkan-init-order.md) |
 | DSV4 sparse FA gather-to-compact | UmaLLama original plus upstream #28105 | **Upstream added** generic sparse FA as `fc82583e6`; local top-K variant is dormant | The active sparse path uses upstream compaction; `flash_attn_top_k.comp` remains unregistered |
 | FA flash-attn mask optimization | Nathanw1014 carry | **Upstream added** | `flash_attn_mask_opt.comp` is present upstream; no remaining UmaLLama-only shader delta |
 | FA MMQ funcs shader | Nathanw1014 carry | **Upstream added** | `flash_attn_mmq_funcs.glsl` is present upstream; no remaining UmaLLama-only shader delta |
