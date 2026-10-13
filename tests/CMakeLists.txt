@@ -178,6 +178,8 @@ set(LLAMA_CONTEXT_TEST_SRC
     llama-context/test-util.cpp
 )
 llama_build(${LLAMA_CONTEXT_TEST_SRC})
+
+# UmaLLama regression test: "Invalid input batch during second turn" (issue #8)
 llama_build(test-seq-rm-attn-only.cpp)
 llama_build(test-save-load-state.cpp)
 
@@ -274,6 +276,7 @@ if (NOT WIN32 OR NOT BUILD_SHARED_LIBS)
         ENVIRONMENT "GGML_SCHED_DEBUG_REALLOC=1"
     )
 
+    # UmaLLama regression: "Invalid input batch during second turn" (issue #8)
     llama_test(
         test-seq-rm-attn-only
         LABEL main
