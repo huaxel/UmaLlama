@@ -2364,6 +2364,18 @@ int llama_context::decode(const llama_batch_ext & batch_inp) {
                         stats.last_selected.data(),
                         n_used);
                 }
+                // Cross-layer prefetch: predict which experts will fire at layer il + 1
+                // and prefetch them into memory asynchronously to overlap I/O with compute.
+                if (moe_residency.cfg.enabled && moe_residency.cfg.async_prefetch &&
+                    il + 1 < n_layer_model && moe_residency.cfg.prefetch_top_k > 0) {
+                    const std::vector<int32_t> predicted = llama_moe_coact::predict_next_layer(
+                        moe_coact, il, stats.last_selected.data(), n_used, moe_residency.cfg.prefetch_top_k);
+                    if (!predicted.empty()) {
+                        llama_moe_residency_prefetch_layer_selection(
+                            &moe_residency, il + 1, predicted.data(), (int) predicted.size());
+                    }
+                }
+
                 // Save first token's selection for next cross-layer.
                 if (moe_prev_layer_selection.size() != (size_t) n_layer_model) {
                     moe_prev_layer_selection.resize(n_layer_model);
@@ -5117,6 +5129,8 @@ struct llama_moe_residency_config llama_moe_residency_config_default(void) {
     cfg.log_per_decode         = 1;
     cfg.debug_sample_interval  = 0;
     cfg.debug_max_pages        = 32;
+    cfg.async_prefetch         = 1;
+    cfg.prefetch_top_k         = 2;
     return cfg;
 }
 
@@ -5133,6 +5147,8 @@ int32_t llama_moe_residency_enable(
     icfg.log_per_decode         = cfg->log_per_decode != 0;
     icfg.debug_sample_interval  = (int) cfg->debug_sample_interval;
     icfg.debug_max_pages        = (int) cfg->debug_max_pages;
+    icfg.async_prefetch         = cfg->async_prefetch != 0;
+    icfg.prefetch_top_k         = (int) cfg->prefetch_top_k;
 
     ctx->expert_tracking_enabled = true;
     ctx->moe_residency.cfg = icfg;
@@ -5184,6 +5200,7 @@ void llama_moe_residency_stats_get(
     out->total_hits       = ctx->moe_residency.total_hits;
     out->total_misses     = ctx->moe_residency.total_misses;
     out->total_evicted    = ctx->moe_residency.total_evicted;
+    out->total_prefetched = ctx->moe_residency.total_prefetched;
     out->decode_count     = ctx->moe_residency.decode_count;
     out->moe_layer_count  = (uint64_t) ctx->moe_residency.layers.size();
     out->advice_success   = ctx->moe_residency.advice_success;

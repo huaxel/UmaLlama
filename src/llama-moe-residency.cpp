@@ -401,6 +401,81 @@ void llama_moe_residency_touch_layer_selection(
     }
 }
 
+void llama_moe_residency_prefetch(
+        struct llama_moe_residency_state * st,
+        int layer_idx,
+        int expert_id) {
+    if (!st || !st->cfg.enabled || !st->cfg.async_prefetch) return;
+    if (layer_idx < 0 || layer_idx >= (int) st->layers.size()) return;
+    if (expert_id < 0 || expert_id >= st->layers[layer_idx].n_expert) return;
+
+    auto & lr = st->layers[layer_idx];
+    int slot = lr.slot_of[expert_id];
+    if (slot >= 0 && lr.cache[slot].occupied) {
+        // Already resident in cache, no I/O needed.
+        return;
+    }
+
+    // Allocate an eviction slot in software R+F cache.
+    const int evict_slot = find_evict_slot(lr.cache, lr.token_counter);
+    if (evict_slot < 0) return;
+
+    if (lr.cache[evict_slot].occupied) {
+        const int evicted_id = lr.cache[evict_slot].expert_id;
+        if (evicted_id >= 0 && evicted_id < (int) lr.slot_of.size()) {
+            lr.slot_of[evicted_id] = -1;
+            const size_t eoff = (size_t) evicted_id;
+            for_each_tensor(lr, [&](void * base, size_t stride) {
+                safe_madvise(reinterpret_cast<uint8_t *>(base) + eoff * stride,
+                             stride, MADV_COLD, "MADV_COLD",
+                             st->advice_success, st->advice_failure,
+                             st->advice_einval, st->invalid_mapping,
+                             st->cfg.log_advice_failures, st);
+            });
+            st->total_evicted++;
+        }
+    }
+
+    // Install entry in R+F cache with access_count 0 until actually touched by compute.
+    auto & e = lr.cache[evict_slot];
+    e.expert_id    = expert_id;
+    e.last_access  = lr.token_counter;
+    e.access_count = 0;
+    e.loaded_at    = lr.token_counter;
+    e.occupied     = true;
+    lr.slot_of[expert_id] = evict_slot;
+    st->total_prefetched++;
+
+    // Mark pages as WILLNEED asynchronously for OS readahead.
+    const size_t off = (size_t) expert_id;
+    for_each_tensor(lr, [&](void * base, size_t stride) {
+        safe_madvise(reinterpret_cast<uint8_t *>(base) + off * stride,
+                     stride, MADV_WILLNEED, "MADV_WILLNEED",
+                     st->advice_success, st->advice_failure,
+                     st->advice_einval, st->invalid_mapping,
+                     st->cfg.log_advice_failures, st);
+    });
+}
+
+void llama_moe_residency_prefetch_layer_selection(
+        struct llama_moe_residency_state * st,
+        int model_layer,
+        const int32_t * expert_ids,
+        int n_expert_ids) {
+    if (!st || !st->cfg.enabled || !st->cfg.async_prefetch) return;
+    if (n_expert_ids <= 0 || !expert_ids) return;
+
+    int idx = -1;
+    for (size_t i = 0; i < st->layers.size(); ++i) {
+        if (st->layers[i].model_layer == model_layer) { idx = (int) i; break; }
+    }
+    if (idx < 0) return;
+
+    for (int i = 0; i < n_expert_ids; ++i) {
+        llama_moe_residency_prefetch(st, idx, expert_ids[i]);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // prewarm()
 // ---------------------------------------------------------------------------
@@ -527,13 +602,14 @@ void llama_moe_residency_log_stats(
     // WARN maps to LOG_LEVEL_WARN (2) which passes the threshold.
     LLAMA_LOG_WARN(
         "moe-residency: decodes=%llu touches=%llu policy_hits=%llu policy_misses=%llu "
-        "evictions=%llu policy_hit_rate=%.1f%% "
+        "prefetched=%llu evictions=%llu policy_hit_rate=%.1f%% "
         "madvise: ok=%llu fail=%llu einval=%llu invalid_map=%llu ok_ratio=%.1f%% "
         "madvise_pressure=%s pressure_failures=%llu\n",
         (unsigned long long) st->decode_count,
         (unsigned long long) st->total_touched,
         (unsigned long long) st->total_hits,
         (unsigned long long) st->total_misses,
+        (unsigned long long) st->total_prefetched,
         (unsigned long long) st->total_evicted,
         policy_hit_rate * 100.0,
         (unsigned long long) st->advice_success,

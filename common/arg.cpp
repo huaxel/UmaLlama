@@ -2904,6 +2904,25 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_env("LLAMA_ARG_MOE_RESIDENCY_DEBUG_INTERVAL"));
     add_opt(common_arg(
+        {"-moe-pf", "--moe-prefetch"},
+        {"-nmoe-pf", "--no-moe-prefetch"},
+        string_format("asynchronously prefetch predicted next-layer MoE experts (default: %s)",
+                      params.moe_residency_prefetch ? "enabled" : "disabled"),
+        [](common_params & params, bool value) {
+            params.moe_residency_prefetch = value;
+        }
+    ).set_env("LLAMA_ARG_MOE_PREFETCH"));
+    add_opt(common_arg(
+        {"-moe-pfk", "--moe-prefetch-top-k"}, "N",
+        string_format("number of predicted experts to prefetch per layer (default: %d)", params.moe_residency_prefetch_top_k),
+        [](common_params & params, int value) {
+            if (value < 0) {
+                throw std::invalid_argument("must be >= 0");
+            }
+            params.moe_residency_prefetch_top_k = value;
+        }
+    ).set_env("LLAMA_ARG_MOE_PREFETCH_TOP_K"));
+    add_opt(common_arg(
         {"-lzm", "--lazy-mode"}, "MODE",
         "on-demand reading of certain tensors, for example per-layer embeddings (default: auto)\n"
         "- on: read the rows of such tensors from disk on demand instead of keeping them resident (requires mmap)\n"
@@ -2985,6 +3004,25 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.moe_residency_debug_interval = value;
         }
     ).set_env("LLAMA_ARG_MOE_RESIDENCY_DEBUG_INTERVAL"));
+    add_opt(common_arg(
+        {"-moe-pf", "--moe-prefetch"},
+        {"-nmoe-pf", "--no-moe-prefetch"},
+        string_format("asynchronously prefetch predicted next-layer MoE experts (default: %s)",
+                      params.moe_residency_prefetch ? "enabled" : "disabled"),
+        [](common_params & params, bool value) {
+            params.moe_residency_prefetch = value;
+        }
+    ).set_env("LLAMA_ARG_MOE_PREFETCH"));
+    add_opt(common_arg(
+        {"-moe-pfk", "--moe-prefetch-top-k"}, "N",
+        string_format("number of predicted experts to prefetch per layer (default: %d)", params.moe_residency_prefetch_top_k),
+        [](common_params & params, int value) {
+            if (value < 0) {
+                throw std::invalid_argument("must be >= 0");
+            }
+            params.moe_residency_prefetch_top_k = value;
+        }
+    ).set_env("LLAMA_ARG_MOE_PREFETCH_TOP_K"));
     add_opt(common_arg(
         {"--numa"}, "TYPE",
         "attempt optimizations that help on some NUMA systems\n"

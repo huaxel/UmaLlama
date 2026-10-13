@@ -605,6 +605,8 @@ struct common_params {
     // and correctness verification, not production. Requires Linux.
     bool   moe_residency_debug     = false;  // sample mincore() per decode
     int32_t moe_residency_debug_interval = 64; // decodes between samples
+    bool   moe_residency_prefetch  = true;   // asynchronously prefetch predicted next-layer experts
+    int32_t moe_residency_prefetch_top_k = 2; // number of predicted experts to prefetch per layer
 
     bool single_turn       = false; // single turn chat conversation
 

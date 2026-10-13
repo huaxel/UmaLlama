@@ -1807,6 +1807,8 @@ extern "C" {
         // actually changing which pages are resident.
         uint32_t debug_sample_interval;  // default 0 (off)
         uint32_t debug_max_pages;        // pages sampled per tensor (default 32)
+        uint8_t  async_prefetch;         // overlap cross-layer expert prefetching asynchronously (0/1, default 1)
+        uint32_t prefetch_top_k;         // predicted experts to prefetch for next layer (default 2)
     };
 
     // Return a config populated with sensible defaults.
@@ -1832,6 +1834,7 @@ extern "C" {
         uint64_t total_hits;       // expert touches that were already loaded
         uint64_t total_misses;     // expert touches that required MADV_WILLNEED
         uint64_t total_evicted;    // experts removed from LRU via MADV_DONTNEED
+        uint64_t total_prefetched; // experts asynchronously prefetched via cross-layer prediction
         uint64_t decode_count;     // total decode() calls observed
         uint64_t moe_layer_count;  // number of MoE layers in the model
         // madvise() observability. Distinguishes "policy hit" (the LRU

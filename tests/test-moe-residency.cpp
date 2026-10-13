@@ -119,12 +119,35 @@ static void test_coactivation_predicts_same_and_next_layer_experts() {
     assert(next_layer[1] == 2);
 }
 
+static void test_async_cross_layer_prefetch() {
+    llama_moe_residency_state state = make_state(0, 4, 3);
+    state.cfg.async_prefetch = true;
+    state.cfg.prefetch_top_k = 2;
+
+    const int32_t prefetch_ids[] = { 1, 2 };
+    llama_moe_residency_prefetch_layer_selection(&state, 0, prefetch_ids, 2);
+
+    // Both experts should be installed in software cache with total_prefetched = 2
+    assert(state.total_prefetched == 2);
+    assert(state.layers[0].slot_of[1] >= 0);
+    assert(state.layers[0].slot_of[2] >= 0);
+    assert(state.total_misses == 0);
+
+    // Later touch should count as cache hit (avoiding miss latency)
+    bool was_loaded = false;
+    llama_moe_residency_touch(&state, 0, 1, &was_loaded);
+    assert(was_loaded == true);
+    assert(state.total_hits == 1);
+    assert(state.total_misses == 0);
+}
+
 int main() {
 #if defined(__linux__)
     test_residency_evicts_lru_expert();
 #endif
     test_residency_tracks_selection_hits_and_invalid_experts();
     test_coactivation_predicts_same_and_next_layer_experts();
+    test_async_cross_layer_prefetch();
 
     printf("test-moe-residency: OK\n");
     return 0;

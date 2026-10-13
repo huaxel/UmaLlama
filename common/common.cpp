@@ -1404,6 +1404,8 @@ common_init_result::common_init_result(common_params & params, bool model_only) 
         rcfg.log_per_decode         = params.moe_residency_log ? 1 : 0;
         rcfg.debug_sample_interval  = params.moe_residency_debug
             ? params.moe_residency_debug_interval : 0;
+        rcfg.async_prefetch         = params.moe_residency_prefetch ? 1 : 0;
+        rcfg.prefetch_top_k         = (uint32_t) params.moe_residency_prefetch_top_k;
         llama_moe_residency_enable(lctx, &rcfg);
     }
 
