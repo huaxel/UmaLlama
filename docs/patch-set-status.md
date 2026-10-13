@@ -2,6 +2,48 @@
 
 UmaLLama diverges from `upstream/master` by carrying third-party work. Re-evaluate this table when upstream merges or upstream PRs close — row status changes weekly.
 
+## 2026-10-13 sync (`upstream/master` 77c4540ce)
+
+29 commits merged; the only fork-specific files that needed conflict resolution were
+`tests/CMakeLists.txt` (replaced the 3 deleted test files with the new
+`tests/llama-context/` + `test-llama-context.cpp` consolidation; kept our
+`test-seq-rm-attn-only.cpp` for the issue #8 regression, dropped the two
+`test-recurrent-state-rollback` invocations against `deepseek4-moe` and
+`kimi-k3-moe` as they are subsumed by the new `test-llama-context --models ...`).
+
+- **`b9f3599fb` llama: do not map foreign ranges** (#30405) — orthogonal to the MoE
+  residency subsystem. The fork's `src/llama-moe-residency.cpp` operates on the model's
+  `mmap` ranges, not on the backend buffer layer. The new per-context, per-range buffer
+  split is complementary: it stops the GPU buffer from pinning the full file
+  (27 GiB on Qwen3.8-Flash-Next IQ4_NL cold cache, 475 → 788 t/s on pp4096), while
+  our residency layer decides which pages to keep resident via `madvise`. Both layers
+  apply; verify on the production Qwen3.6-35B-A3B-MTP before claiming a combined
+  speedup.
+- **`f441d2d9d` model: load YaRN beta metadata for laguna** (#30331) — touches our
+  `src/models/laguna.cpp` (a 3-line addition at the top of `load_arch_hparams`).
+  Trivial rebase.
+- **`a17e94d22` tests: consolidate context state tests** (#30023) — collapses
+  `test-save-load-state`, `test-recurrent-state-rollback`, and
+  `test-state-restore-fragmented` into a single `test-llama-context` matrix. Pre-existing
+  test bug surfaced: `case_rollback` asserts `nmse == 0` on architectures that do not
+  satisfy the in-file TODO precondition (rollback is only bit-exact after a ubatch
+  with more than `n_rs_seq` tokens). The `deepseek4` dummy fixture hits this and fails
+  with `nmse 0.0` (an exact token mismatch, not numerical noise). Fix-forward: added
+  `arch_rollback_is_inexact()` per-arch skip helper, mirroring the existing
+  `arch_reserves_single_seq()` pattern. Upstream PR #30473 opened (auto-assigned to
+  ggerganov).
+- **`cb55ffe6e` graph: skip the LM head for pooled embeddings** (#30445),
+  **`988015788` graph: avoid reallocations in the "no cache" path** (#30439),
+  **`ed019cd8b` llama: skip logits buffer allocation** (#30255),
+  **`ace20f679` graph: pad the KQ bias** (#30446) — graph-side refactor. Auto-merged
+  into `src/llama-context.{cpp,h}`, `src/llama-graph.{cpp,h}`, `include/llama.h`. The
+  fork's expert-activation tracking hook in `llama-context.cpp` survives unchanged.
+
+Carry rows unchanged. `Vulkan APU nodes_per_submit auto-lower` row's "Defaults to 8 on
+UMA" claim was re-verified by inspection — the canonical build still hardcodes 100 in
+`ggml-vulkan.cpp` and the APU-default-8 logic is not present. Mark for retirement on
+the next sync if the table is not refreshed.
+
 ## 2026-10-12 sync (`upstream/master` 8bb3cf0d2)
 
 - Vulkan `mul_mat_id` tiled prepass (#29998): upstream extended hoisting and tiling into
