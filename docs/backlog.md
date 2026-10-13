@@ -40,6 +40,20 @@
 
 ---
 
+### Item 4: Asynchronous MoE Expert Overlap & Prefetching
+* **Inspiration:** `Strata` (`Niko1221/Strata`)
+* **Category:** Tier 2 (Modular Out-of-Tree Extension)
+* **Status:** **Completed** (commit `bd6ad9c97`)
+* **Implemented Changes:**
+  * Added asynchronous cross-layer prefetching using the co-activation matrix and `MADV_WILLNEED` in `src/llama-moe-residency.h` and `src/llama-moe-residency.cpp`.
+  * Added `llama_moe_residency_prefetch()` and `llama_moe_residency_prefetch_layer_selection()`.
+  * Integrated cross-layer prediction during decode in `src/llama-context.cpp` to asynchronously prefetch predicted layer $il+1$ experts, overlapping disk/RAM paging with current layer GPU/CPU computation.
+  * Added CLI/env flags `--moe-prefetch` and `--moe-prefetch-top-k` in `common/arg.cpp`, `common/common.h`, and `common/common.cpp`.
+  * Added unit test `test_async_cross_layer_prefetch` in `tests/test-moe-residency.cpp`.
+* **Verification:** Built cleanly and passed test suite (`test-moe-residency: OK`).
+
+---
+
 ## Active Backlog Items
 
 ---
@@ -56,15 +70,3 @@
 * **Expected Benefit:** Preserves full floating-point precision on short system instructions and reasoning prefixes, while protecting memory bandwidth on long agent transcripts.
 * **Upstream PR Viability:** **8/10** — Clean addition to the KV cache manager; highly requested feature in upstream discussions.
 
----
-
-### Item 4: Asynchronous MoE Expert Overlap (CPU $\parallel$ GPU)
-* **Inspiration:** `Strata` (`Niko1221/Strata`)
-* **Category:** Tier 2 (Modular Out-of-Tree Extension)
-* **Target Files:**
-  * `src/llama-moe-residency.cpp`
-  * `src/llama-context.cpp`
-* **Problem:** When an MoE model exceeds physical RAM and a token activates a non-resident expert, GPU execution bubbles while the kernel pages the expert into physical memory.
-* **Proposed Solution:** Overlap the execution of non-resident experts on CPU using AVX-512 while the GPU processes dense attention layers and resident experts, accumulating outputs at the layer barrier.
-* **Expected Benefit:** Hides paging latency during cold expert routing without stalling the GPU compute pipeline.
-* **Upstream PR Viability:** **7/10** — Maintained in UmaLLama's modular `llama-moe-residency.cpp` subsystem with minimal non-invasive hooks in `llama-context.cpp`.
