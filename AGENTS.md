@@ -495,7 +495,7 @@ must keep I as a multiple of 32.
 
 The deleted `fewtarius/CachyLLama` remote is preserved as `legacy-upstream`. The active `upstream` remote is now `ggml-org/llama.cpp`; `origin` remains `huaxel/UmaLLama` (formerly `CachyLLama`).
 
-`master` has been promoted to the verified canonical port. The `canonical-port` branch remains as the migration checkpoint. `origin/master` still points to the legacy fork tip until the promotion is explicitly pushed. Future canonical updates should use the normal `master` workflow; keep `canonical-port` as a recovery reference.
+`master` has been promoted to the verified canonical port and the promotion was pushed to `origin/master` on 2026-10-13. The `canonical-port` branch remains as the migration checkpoint and is kept as a recovery reference. Future canonical updates should use the normal `master` workflow. As of 2026-10-13, `master` and `origin/master` are in sync at `4018ed541`, 0 behind `upstream/master`.
 
 ### Historical fork delta
 
@@ -529,7 +529,16 @@ Running configuration (as of 2026-07-28):
 
 ### Migration verification
 
-The canonical port has been verified with a full Release build, CPU-only and UI-disabled configurations, the full CTest suite, and `test-backend-ops` (18,844/18,844). Review the promotion before pushing `master` to `origin` or deploying it.
+The canonical port has been verified with a full Release build, CPU-only and UI-disabled configurations, the full CTest suite, and `test-backend-ops`. The promotion was pushed to `origin/master` on 2026-10-13.
+
+Post-promotion sync: the 2026-10-13 upstream merge (`8bb3cf0d2` → `77c4540ce`, 29 commits + 1 follow-up) brought `master` through the test suite again. As of `4018ed541`:
+
+- `ctest` (CPU, 73 tests): **73/73 passed (100%)**
+- `test-backend-ops -b Vulkan0` (full Vulkan suite): **22,930/22,930 passed (100%)**
+- `master` ahead of `origin/master`: **0**
+- `master` behind `upstream/master`: **0**
+
+Upstream PR #30473 is open against `ggml-org/llama.cpp` (the `case_rollback` deepseek4 skip surfaced during the 2026-10-13 merge).
 
 ---
 
