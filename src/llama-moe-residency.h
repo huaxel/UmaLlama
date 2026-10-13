@@ -100,6 +100,12 @@ struct llama_moe_residency_internal_cfg {
     // debug_sample_interval = 0 disables the periodic mincore() sample.
     int    debug_sample_interval = 0;
     int    debug_max_pages       = 32;
+
+    // Asynchronous cross-layer MoE prefetch overlap. When enabled,
+    // predicted next-layer experts from the co-activation matrix are prefetched
+    // via background madvise(MADV_WILLNEED) worker to overlap I/O with current compute.
+    bool   async_prefetch        = true;
+    int    prefetch_top_k        = 2;
 };
 
 // Aggregate residency state. One entry per MoE layer.
@@ -115,6 +121,9 @@ struct llama_moe_residency_state {
     uint64_t total_evicted = 0;
     uint64_t total_touched = 0;
     uint64_t decode_count  = 0;
+
+    // Asynchronous overlap / prefetch statistics
+    uint64_t total_prefetched = 0;
 
     // madvise() observability. advice_success/advice_failure are counted
     // per call to safe_madvise(); advice_einval counts the calls that the
@@ -182,6 +191,19 @@ void llama_moe_residency_touch(
         int layer_idx,
         int expert_id,
         bool * was_already_loaded);
+
+// Asynchronously prefetch an expert (issues MADV_WILLNEED and pre-populates R+F entry)
+// to overlap disk paging with computation. Non-blocking.
+void llama_moe_residency_prefetch(
+        struct llama_moe_residency_state * st,
+        int layer_idx,
+        int expert_id);
+
+void llama_moe_residency_prefetch_layer_selection(
+        struct llama_moe_residency_state * st,
+        int model_layer,
+        const int32_t * expert_ids,
+        int n_expert_ids);
 
 // Tear down state. Phase 1 is a no-op since we don't allocate separate buffers.
 void llama_moe_residency_release(
