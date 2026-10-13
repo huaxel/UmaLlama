@@ -166,9 +166,22 @@ if (LLAMA_LLGUIDANCE)
     llama_build_and_test(test-grammar-llguidance.cpp ARGS ${PROJECT_SOURCE_DIR}/models/ggml-vocab-llama-bpe.gguf)
 endif ()
 
-llama_build(test-recurrent-state-rollback.cpp)
+# llama_context state tests: KV and recurrent state save, load, copy, rollback
+# (consolidated from upstream test-save-load-state / test-recurrent-state-rollback
+# / test-state-restore-fragmented, merged in 8bb3cf0d2..77c4540ce)
+set(LLAMA_CONTEXT_TEST_SRC
+    test-llama-context.cpp
+    llama-context/cases-kv.cpp
+    llama-context/cases-rs.cpp
+    llama-context/test-case.cpp
+    llama-context/test-log.cpp
+    llama-context/test-runner.cpp
+    llama-context/test-util.cpp
+)
+llama_build(${LLAMA_CONTEXT_TEST_SRC})
+
+# CachyLLama regression test: "Invalid input batch during second turn" (issue #8)
 llama_build(test-seq-rm-attn-only.cpp)
-llama_build(test-save-load-state.cpp)
 
 if (NOT WIN32 OR NOT BUILD_SHARED_LIBS)
     # these tests are disabled on Windows because they use internal functions not exported with LLAMA_API (when building with shared libraries)
@@ -214,6 +227,8 @@ if (NOT WIN32 OR NOT BUILD_SHARED_LIBS)
 
     # llama_build_and_test(test-double-float.cpp) # SLOW
 
+    # TODO: after `test-llama-archs` is refactored to not link internal symbols, we can move all related tests out of
+    #       this branch and run them on all platforms
     llama_build(test-llama-archs.cpp)
 
     set(MODEL_DIR "${CMAKE_CURRENT_BINARY_DIR}/test-models/")
@@ -229,51 +244,25 @@ if (NOT WIN32 OR NOT BUILD_SHARED_LIBS)
         FIXTURES_SETUP generate-models
     )
 
-    # Test recurrent-state rollback across all architectures, using the generated dummy models
+    # Test context state handling across all architectures, using the generated dummy models
     llama_test(
-        test-recurrent-state-rollback
+        test-llama-context
         LABEL main
         ARGS --models "${MODEL_DIR}"
     )
     # abort on graph reallocations that the initial reserve should have covered
-    set_tests_properties(test-recurrent-state-rollback PROPERTIES
+    set_tests_properties(test-llama-context PROPERTIES
         FIXTURES_REQUIRED generate-models
         ENVIRONMENT "GGML_SCHED_DEBUG_REALLOC=1"
     )
 
-    # Test state save/load functionality across all architectures, using the generated dummy models
-    llama_test(
-        test-save-load-state
-        LABEL main
-        ARGS --models "${MODEL_DIR}"
-    )
-    set_tests_properties(test-save-load-state PROPERTIES FIXTURES_REQUIRED generate-models)
-
+    # CachyLLama regression: "Invalid input batch during second turn" (issue #8)
     llama_test(
         test-seq-rm-attn-only
         LABEL main
         ARGS -m "${MODEL_DIR}/qwen35-dense.gguf"
     )
     set_tests_properties(test-seq-rm-attn-only PROPERTIES
-        FIXTURES_REQUIRED generate-models
-    )
-
-    llama_test(
-        test-recurrent-state-rollback
-        NAME test-recurrent-state-rollback-dsv4
-        LABEL main
-        ARGS -m "${MODEL_DIR}/deepseek4-moe.gguf"
-    )
-    set_tests_properties(test-recurrent-state-rollback-dsv4 PROPERTIES
-        FIXTURES_REQUIRED generate-models
-    )
-    llama_test(
-        test-recurrent-state-rollback
-        NAME test-recurrent-state-rollback-kimi-k3
-        LABEL main
-        ARGS -m "${MODEL_DIR}/kimi-k3-moe.gguf"
-    )
-    set_tests_properties(test-recurrent-state-rollback-kimi-k3 PROPERTIES
         FIXTURES_REQUIRED generate-models
     )
 
@@ -303,6 +292,9 @@ if (NOT WIN32 OR NOT BUILD_SHARED_LIBS)
         LABEL main
     )
 
+    # (test-save-load-state and test-recurrent-state-rollback were removed
+    # upstream in 8bb3cf0d2..77c4540ce and replaced by test-llama-context,
+    # which runs against the same generated dummy models.)
     llama_build(test-fusion.cpp)
 endif()
 
@@ -342,6 +334,10 @@ add_test(NAME test-download-model COMMAND ${CMAKE_COMMAND}
     -P ${PROJECT_SOURCE_DIR}/cmake/download-models.cmake
 )
 set_tests_properties(test-download-model PROPERTIES FIXTURES_SETUP test-download-model)
+
+# the context state cases against a real model, the sweep above uses the generated dummy ones
+llama_test(test-llama-context NAME test-llama-context-model LABEL "model" ARGS -m "${MODEL_DEST}")
+set_tests_properties(test-llama-context-model PROPERTIES FIXTURES_REQUIRED test-download-model)
 
 llama_build_and_test(test-thread-safety.cpp ARGS -m "${MODEL_DEST}" -ngl 99 -p "The meaning of life is" -n 128 -c 256 -ub 32 -np 4 -t 2)
 set_tests_properties(test-thread-safety PROPERTIES FIXTURES_REQUIRED test-download-model)
@@ -393,12 +389,6 @@ llama_build_and_test(test-tiled-mulmat.cpp LINK ggml)
 llama_build_and_test(test-model-load-cancel.cpp LABEL "model")
 llama_build_and_test(test-autorelease.cpp       LABEL "model")
 llama_build_and_test(test-backend-sampler.cpp   LABEL "model")
-
-# Test for state restore with fragmented KV cache
-# Requires a model, uses same args pattern as test-thread-safety
-# TODO: run on all dummy models
-llama_build_and_test(test-state-restore-fragmented.cpp LABEL "model" ARGS -m "${MODEL_DEST}")
-set_tests_properties(test-state-restore-fragmented PROPERTIES FIXTURES_REQUIRED test-download-model)
 
 if (APPLE)
     llama_build(test-rset-release.cpp)
