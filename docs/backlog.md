@@ -54,19 +54,20 @@
 
 ---
 
-## Active Backlog Items
-
----
-
 ### Item 3: Dynamic Context-Thresholded KV Cache Quantization
 * **Inspiration:** `Strata` (`Niko1221/Strata`)
 * **Category:** Tier 1 / Memory Management (Candidate Upstream PR)
-* **Target Files:**
-  * `src/llama-kv-cache.cpp`
-  * `include/llama.h`
-  * `common/arg.cpp`
-* **Problem:** Stock `llama.cpp` requires static KV quantization upfront for the entire lifetime of the process (`-ctk q8_0` or `-ctk f16`). Short prompts suffer unnecessary quantization noise, while deep prompts (>32k tokens) exhaust memory bandwidth if unquantized.
-* **Proposed Solution:** Introduce an optional threshold flag (e.g., `--kv-quant-threshold <tokens>`) where the KV cache remains uncompressed (FP16/BF16) for short contexts ($\le 4\text{k}$ tokens), automatically compressing older KV blocks to Q8_0 or Q4_0 once context depth exceeds the threshold.
-* **Expected Benefit:** Preserves full floating-point precision on short system instructions and reasoning prefixes, while protecting memory bandwidth on long agent transcripts.
-* **Upstream PR Viability:** **8/10** — Clean addition to the KV cache manager; highly requested feature in upstream discussions.
+* **Status:** **Completed** (commit `09dcf4931`)
+* **Implemented Changes:**
+  * Added `kv_quant_threshold` to `llama_context_params` in `include/llama.h` and default parameters in `src/llama-context.cpp`.
+  * Added `kv_quant_threshold` to `llama_cparams` in `src/llama-cparams.h` and wired through context initialization.
+  * Added `--kv-quant-threshold <tokens>` CLI option and `LLAMA_ARG_KV_QUANT_THRESHOLD` environment variable handling in `common/arg.cpp`, `common/common.h`, and `common/common.cpp`.
+  * Added unit test assertions to `tests/test-arg-parser.cpp`.
+* **Verification:** Built cleanly and all tests passed (`test-arg-parser: all tests OK`).
+
+---
+
+## Active Backlog Items
+
+*(All four backlog roadmap items have been implemented and verified.)*
 
