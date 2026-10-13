@@ -10,18 +10,12 @@ regardless of where it originated.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Upstream: ggml-org/llama.cpp](https://img.shields.io/badge/upstream-ggml--org%2Fllama.cpp-orange.svg)](https://github.com/ggml-org/llama.cpp)
-[![Parent project: fewtarius/llama-ai](https://img.shields.io/badge/parent-fewtarius%2Fllama--ai-green.svg)](https://github.com/fewtarius/llama-ai)
-
-[llama-ai parent project](https://github.com/fewtarius/llama-ai) / [CLIO agentic client](https://github.com/SyntheticAutonomicMind/CLIO) / [Upstream llama.cpp](https://github.com/ggml-org/llama.cpp) / [ggml](https://github.com/ggml-org/ggml)
 
 ---
 
 ## Overview
 
-UmaLLama is the C++ inference engine of the [llama-ai ecosystem](https://github.com/fewtarius/llama-ai). While upstream `llama.cpp` focuses on raw token execution, UmaLLama optimizes for **end-to-end agentic throughput** on shared-memory AMD APU hardware (18–30K prompt contexts on 5–20 t/s hardware).
-
-- **This repository:** Core C++ inference engine with persistent KV caching, MoE residency paging, fused Vulkan shaders, and APU tuning.
-- **Turnkey installation:** The [parent project](https://github.com/fewtarius/llama-ai) provides automated hardware detection, ISA tuning, runner scripts, and benchmarks.
+While upstream `llama.cpp` focuses on raw token execution, UmaLLama optimizes for **end-to-end agentic throughput** on shared-memory AMD APU hardware (18–30K prompt contexts on 5–20 t/s hardware). Core C++ inference engine with persistent KV caching, MoE residency paging, fused Vulkan shaders, and APU tuning.
 
 ### Persistent SSD-backed KV cache
 
@@ -325,10 +319,6 @@ build flags — everything is runtime config via the CLI flags above.
   and UmaLLama's upstream-first PR alignment methodology
 - [Feature Backlog & Roadmap](docs/backlog.md) — prioritized upstream-PR-ready
   backlog (native BF16 KV, atomic slot rollback, dynamic KV quantization, MoE overlap)
-- [Parent project (fewtarius/llama-ai)](https://github.com/fewtarius/llama-ai) — runner
-  scripts, GPU detection, benchmarks, end-to-end install
-- [CLIO](https://github.com/SyntheticAutonomicMind/CLIO) — agentic AI client
-  optimized for UmaLLama's persistent cache
 - [User isolation design](docs/development/user-isolation-design.md) —
   architecture for the `user_id` / `u/` namespace / `--max-concurrent-per-user`
   features
