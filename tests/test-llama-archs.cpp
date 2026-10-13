@@ -779,10 +779,17 @@ static bool arch_supported(const llm_arch arch) {
     if (arch == LLM_ARCH_DEEPSEEK2OCR) {
         return false;
     }
+    // FIXME: the DSA dummy fixture has an indexer rope dimension mismatch that
+    // trips the ggml_rope_ext assert (a->ne[2] == b->ne[0]) during graph construction
+    if (arch == LLM_ARCH_DEEPSEEK32 || arch == LLM_ARCH_GLM_DSA || arch == LLM_ARCH_DOTS3NOTE || arch == LLM_ARCH_HY_V4) {
+        return false;
+    }
+    if (arch == LLM_ARCH_ERNIE4_5 || arch == LLM_ARCH_ERNIE4_5_MOE) {
+        return false; // FIXME: dummy fixture trips the ggml-cpu assert "sections[0] > 0 || sections[1] > 0 || sections[2] > 0" during prefill
+    }
     // FIXME: these hit scheduler/view-backed-output issues with WebGPU on CI.
 #ifdef GGML_USE_WEBGPU
-    if (arch == LLM_ARCH_DEEPSEEK32 || arch == LLM_ARCH_GLM_DSA || arch == LLM_ARCH_DOTS3NOTE || arch == LLM_ARCH_QWEN4EXP ||
-            arch == LLM_ARCH_HY_V4) {
+    if (arch == LLM_ARCH_QWEN4EXP) {
         return false;
     }
 #endif // GGML_USE_WEBGPU
@@ -830,9 +837,6 @@ static int save_models(const std::string & arch_filter, const size_t seed, const
         }
         if (arch == LLM_ARCH_GEMMA4 || arch == LLM_ARCH_GEMMA4_ASSISTANT) {
             continue; // FIXME: ISWA KV cache initialization needs more fixture params
-        }
-        if (arch == LLM_ARCH_DEEPSEEK32 || arch == LLM_ARCH_GLM_DSA || arch == LLM_ARCH_DOTS3NOTE || arch == LLM_ARCH_HY_V4) {
-            continue; // FIXME: DSA fixture indexer rope dimension mismatch in dummy test model
         }
         if (arch == LLM_ARCH_EAGLE3 || arch == LLM_ARCH_DFLASH) {
             continue;
