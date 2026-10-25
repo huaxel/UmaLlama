@@ -61,8 +61,8 @@ the next sync if the table is not refreshed.
   prepass (`pipeline_mmid_row_lists`) was dropped as superseded. UmaLLama's `fused_scale`
   binding (binding 5), `fusion_flags`, and `GGML_VK_MMID_PROBE` were rebased onto the new tile mapping.
 - Slot context checkpoints appendix: upstream natively saves and restores slot context
-  checkpoints within the slot file appendix. UmaLLama retains its sidecar `.ckpt` and tip
-  synthesis fallback when the appendix is empty.
+  checkpoints within the slot file appendix. UmaLLama's sidecar `.ckpt` fallback was
+  dropped as superseded (2026-10-25 sync); the native appendix is now the only path.
 - Speculative decoding position & embeddings: adapted to upstream's `batch.set_embd_state()`.
 - Chat PEG parser & streaming: preserved UmaLLama's malformed DSML sanitization and salvage
   fallback across upstream's PEG parser refactoring.

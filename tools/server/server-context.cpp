@@ -3127,7 +3127,7 @@ private:
     }
 
     void create_checkpoint(server_slot & slot, const int64_t n_tokens_cur, llama_pos pos_min, llama_pos pos_max) {
-        // a slot restore with no .ckpt sidecar synthesizes a tip checkpoint here
+        // a slot restore with an empty appendix leaves tip coverage to be rebuilt here
         // while the slot is idle (is_processing() == false), so slot.task is null
         const int id_task = slot.task ? slot.task->id : -1;
 
