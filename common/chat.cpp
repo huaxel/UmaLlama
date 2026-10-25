@@ -1790,12 +1790,12 @@ static common_chat_msg salvage_peg_native_output(const std::string &            
     common_chat_msg msg;
     msg.role = "assistant";
 
-    if (params.format != COMMON_CHAT_FORMAT_PEG_NATIVE || !params.parse_tool_calls) {
+    if (params.format != COMMON_CHAT_FORMAT_PEG_NATIVE) {
         msg.content = input;
         return msg;
     }
 
-    bool has_thinking = params.reasoning_format != COMMON_REASONING_FORMAT_NONE;
+    bool has_thinking = true;
 
     // Determine which tool-call format is in use by probing the input.
     bool has_bracket_tc    = input.find("[TOOL_CALLS]") != std::string::npos;
