@@ -1,7 +1,8 @@
 #include "server-context.h"
 #include <atomic>
 #include <thread>
-#include "base64.hpp"#include "server-context-ssd-manager.h"
+#include "base64.hpp"
+#include "server-context-ssd-manager.h"
 #include "kv-ssd-system-cache.h"
 #include "kv-ssd-cache.h"
 #include "server-chat.h"
