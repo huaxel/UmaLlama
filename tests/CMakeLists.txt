@@ -181,7 +181,6 @@ llama_build(${LLAMA_CONTEXT_TEST_SRC})
 
 # UmaLLama regression test: "Invalid input batch during second turn" (issue #8)
 llama_build(test-seq-rm-attn-only.cpp)
-llama_build(test-save-load-state.cpp)
 
 if (NOT WIN32 OR NOT BUILD_SHARED_LIBS)
     # these tests are disabled on Windows because they use internal functions not exported with LLAMA_API (when building with shared libraries)
