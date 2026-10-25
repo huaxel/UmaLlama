@@ -7806,9 +7806,6 @@ static void ggml_vk_mul_mat_id_q_f16(ggml_backend_vk_context * ctx, vk_context& 
             ggml_pipeline_request_descriptor_sets(ctx, to_q8_1, 1);
         }
         ggml_pipeline_request_descriptor_sets(ctx, count_experts, 1);
-        if (use_row_lists) {
-            ggml_pipeline_request_descriptor_sets(ctx, ctx->device->pipeline_mmid_row_lists, 1);
-        }
     }
 
     vk_buffer d_D = dst_buf_ctx->dev_buffer;
@@ -7928,19 +7925,6 @@ static void ggml_vk_mul_mat_id_q_f16(ggml_backend_vk_context * ctx, vk_context& 
         }
     }
     ggml_vk_sync_buffers(ctx, subctx);
-
-    if (use_row_lists) {
-        // Prefix-sum the expert counts and scatter (ii0, ii1) into per-expert row lists
-        const std::vector<uint32_t> pc = { (uint32_t)nei0,
-                                           (uint32_t)nei1,
-                                           (uint32_t)(nbi0 / ggml_type_size(ids->type)),
-                                           (uint32_t)(nbi1 / ggml_type_size(ids->type)),
-                                           (uint32_t)(get_misalign_bytes(ctx, ids) / ggml_type_size(ids->type)),
-                                           (uint32_t)n_as };
-        ggml_vk_dispatch_pipeline(ctx, subctx, ctx->device->pipeline_mmid_row_lists,
-            { vk_subbuffer{ d_ids, ids_buf_offset, ids_sz }, expert_count_buf }, pc, { 1, 1, 1});
-        ggml_vk_sync_buffers(ctx, subctx);
-    }
 
     const uint64_t x_range = qx_needs_dequant ? x_sz : ggml_nbytes(src0);
     const uint64_t y_range = (qy_needs_dequant || quantize_y) ? y_sz : ggml_nbytes(src1);
