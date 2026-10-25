@@ -3980,31 +3980,14 @@ ggml_tensor * llm_graph_context::build_rs(
     // state: it still holds the n_rs - n_seqs extra states and copies no state of a single sequence ubatch
     ggml_tensor * state_copy = get_state_rows ? inp->s_copy_tail : inp->s_copy;
 
+    // NOTE (merge): the fork's snapshot shift-register lived here. Upstream redesigned
+    // the snapshot inputs (s_copy_tail + explicit extra-state copy in the callee above),
+    // so the old shift against s_copy_main/s_copy_extra no longer applies (s_copy_extra
+    // is gone). Dropped; rollback correctness is re-validated by
+    // test-recurrent-state-rollback and the hybrid warm-append/SSD-restore checks.
     return build_rs(s, state_copy, inp->s_copy_main, state_size, n_seqs,
                     kv_state->get_n_rs(), kv_state->get_head(), kv_state->get_size(), kv_state->get_rs_z(),
                     get_state_rows);
-
-    // Shift the older snapshot slots up so rollback stays valid when this decode
-    // holds fewer than K new tokens per sequence: slot s must keep the state s
-    // tokens back, but the arch write code below only refreshes slots [0, n).
-    // Move old slot [0, K-n) to [n, K) first (descending, src and dst overlap),
-    // then the fresh writes land on [0, n). No-op when n covers all slots.
-    {
-        const int64_t mem_size = kv_state->get_size();
-        const int64_t n_slots  = mem_size > 0 ? s->ne[1]/mem_size : 1;
-        const int64_t n_shift  = inp->n_seq_tokens;
-        const int64_t rs_head  = kv_state->get_head();
-        const size_t  row_size = ggml_row_size(s->type, s->ne[0]);
-        for (int64_t slot = n_slots - 1; slot >= n_shift && n_shift > 0; --slot) {
-            ggml_build_forward_expand(gf, ggml_cpy(ctx0,
-                ggml_view_2d(ctx0, s, s->ne[0], n_seqs, s->nb[1],
-                    (size_t) ((slot - n_shift)*mem_size + rs_head)*row_size),
-                ggml_view_2d(ctx0, s, s->ne[0], n_seqs, s->nb[1],
-                    (size_t) (slot*mem_size + rs_head)*row_size)));
-        }
-    }
-
-    return res;
 }
 
 ggml_tensor * llm_graph_context::build_rwkv_token_shift_load(
