@@ -8,7 +8,8 @@ readme = "README.md"
 authors = [{name = "GGML", email = "ggml@ggml.ai"}]
 requires-python = '>=3.10,<3.15'
 dependencies = [
-    'numpy (>=2.2.6,<3.0.0)',
+    'numpy (>=2.2.6,<3.0.0); python_version < "3.14"',
+    'numpy (>=2.3.0,<3.0.0); python_version >= "3.14"',
     'sentencepiece (>=0.1.98,<0.3.0)',
     'transformers (==4.57.6)',
     'protobuf (>=4.21.0,<5.0.0)',
@@ -63,6 +64,11 @@ torch = [
 name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests/test_conversion_fp8.py", "gguf-py/tests"]
+pythonpath = ["."]
+norecursedirs = ["ai-assisted", "tools/server/tests", "scripts/snapdragon/qdc/tests"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
