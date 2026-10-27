@@ -6183,7 +6183,8 @@ server_context_meta server_context::get_meta() const {
         /* has_inp_video           */ impl->chat_params.allow_video,
         /* has_cap_chat            */ impl->has_cap_chat(),
         /* has_cap_tts             */ impl->has_cap_tts(),
-        /* has_audio_stream        */ impl->mtmd_cap.audio_stream,
+        // only realtime transcription models (no chat) stream without a prompt
+        /* has_audio_stream        */ impl->mtmd_cap.audio_stream && !impl->mtmd_cap.chat,
         /* json_ui_settings        */ impl->json_ui_settings,
         /* slot_n_ctx              */ impl->n_ctx_slot(),
         /* pooling_type            */ llama_pooling_type(impl->ctx_tgt),
