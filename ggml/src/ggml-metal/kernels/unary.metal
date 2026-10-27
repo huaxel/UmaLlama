@@ -20,7 +20,6 @@ inline bfloat4 ggml_metal_unary_cast<bfloat4, float>(float x) {
     return bfloat4(bfloat(x), bfloat(x), bfloat(x), bfloat(x));
 }
 #endif
-
 template <typename T0, typename T, typename TC>
 kernel void kernel_unary_impl(
         constant ggml_metal_kargs_unary & args,
